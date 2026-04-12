@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IdeaScroller</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #2a2a3e;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 { font-size: 20px; font-weight: 700; color: #fff; }
+        .header .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+        .threshold-display { font-size: 12px; color: #888; }
+        .threshold-display input {
+            background: #2a2a3e; color: #fff; border: 1px solid #3a3a4e;
+            padding: 2px 8px; border-radius: 4px; width: 60px; text-align: center;
+            font-size: 12px;
+        }
+        .controls {
+            padding: 16px 24px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            border-bottom: 1px solid #2a2a3e;
+        }
+        .btn {
+            border: none; padding: 8px 20px; border-radius: 6px;
+            font-weight: 600; font-size: 14px; cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-start { background: #22c55e; color: #000; }
+        .btn-stop { background: #ef4444; color: #fff; }
+        .stats {
+            margin-left: auto;
+            display: flex; gap: 20px; font-size: 13px; color: #888;
+        }
+        .stats .value { color: #fff; }
+        .stats .scraped .value { color: #22c55e; }
+        .stats .comments .value { color: #3b82f6; }
+        .log-section { padding: 16px 24px; }
+        .log-section .label {
+            font-size: 12px; color: #666; text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 8px;
+        }
+        .log-box {
+            background: #000; border-radius: 8px; padding: 16px;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px;
+            line-height: 1.8; color: #888; height: 200px; overflow-y: auto;
+        }
+        .log-entry .time { color: #555; }
+        .log-entry .msg { color: #ccc; }
+        .results-section { padding: 0 24px 24px; display: none; }
+        .results-section.visible { display: block; }
+        .results-section .label {
+            font-size: 12px; color: #666; text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 12px;
+        }
+        .cluster {
+            background: #1a1a2e; border-radius: 8px; padding: 16px;
+            margin-bottom: 12px; border-left: 3px solid #f59e0b;
+        }
+        .cluster.medium { border-left-color: #8b5cf6; }
+        .cluster.low { border-left-color: #6b7280; }
+        .cluster-header {
+            display: flex; justify-content: space-between; align-items: start;
+        }
+        .cluster-theme { font-size: 14px; font-weight: 600; color: #fff; }
+        .cluster-meta { font-size: 12px; color: #888; margin-top: 4px; }
+        .cluster-badge {
+            padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
+            flex-shrink: 0;
+        }
+        .cluster-badge.HIGH { background: #f59e0b22; color: #f59e0b; }
+        .cluster-badge.MEDIUM { background: #8b5cf622; color: #8b5cf6; }
+        .cluster-badge.LOW { background: #6b728022; color: #6b7280; }
+        .cluster-summary {
+            font-size: 13px; color: #aaa; margin-top: 8px; line-height: 1.6;
+        }
+        .cluster-idea {
+            font-size: 12px; color: #3b82f6; margin-top: 8px;
+        }
+        .analyzing-spinner {
+            display: none; padding: 24px; text-align: center; color: #888;
+        }
+        .analyzing-spinner.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>IdeaScroller</h1>
+            <div class="subtitle">TikTok pain point discovery</div>
+        </div>
+        <div class="threshold-display">
+            Threshold:
+            <input type="number" id="threshold" value="300" min="1">
+            comments
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-start" id="startBtn">Start</button>
+        <button class="btn btn-stop" id="stopBtn" disabled>Stop</button>
+        <div class="stats">
+            <span>Videos: <span class="value" id="videosScanned">0</span></span>
+            <span class="scraped">Scraped: <span class="value" id="videosScraped">0</span></span>
+            <span class="comments">Comments: <span class="value" id="totalComments">0</span></span>
+        </div>
+    </div>
+
+    <div class="log-section">
+        <div class="label">Live Log</div>
+        <div class="log-box" id="logBox"></div>
+    </div>
+
+    <div class="analyzing-spinner" id="spinner">Analyzing comments with Claude...</div>
+
+    <div class="results-section" id="resultsSection">
+        <div class="label">Analysis Results</div>
+        <div id="clustersContainer"></div>
+    </div>
+
+    <script>
+        var ws = null;
+        var sessionId = null;
+
+        function connectWebSocket() {
+            var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(protocol + '//' + location.host + '/ws');
+
+            ws.onmessage = function(event) {
+                var data = JSON.parse(event.data);
+                if (data.type === 'log') {
+                    addLogEntry(data.timestamp, data.message);
+                } else if (data.type === 'stats') {
+                    document.getElementById('videosScanned').textContent = data.videos_scanned;
+                    document.getElementById('videosScraped').textContent = data.videos_scraped;
+                    document.getElementById('totalComments').textContent = data.total_comments;
+                } else if (data.type === 'analysis') {
+                    document.getElementById('spinner').classList.remove('visible');
+                    renderClusters(data.clusters);
+                }
+            };
+
+            ws.onclose = function() {
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+
+        function addLogEntry(timestamp, message) {
+            var logBox = document.getElementById('logBox');
+            var time = new Date(timestamp).toLocaleTimeString();
+            var entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            var timeSpan = document.createElement('span');
+            timeSpan.className = 'time';
+            timeSpan.textContent = time;
+
+            var msgSpan = document.createElement('span');
+            msgSpan.className = 'msg';
+            msgSpan.textContent = ' ' + message;
+
+            entry.appendChild(timeSpan);
+            entry.appendChild(msgSpan);
+            logBox.appendChild(entry);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function startScrolling() {
+            var threshold = document.getElementById('threshold').value;
+            fetch('/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comment_threshold: parseInt(threshold) }),
+            }).then(function() {
+                return fetch('/start', { method: 'POST' });
+            }).then(function(response) {
+                return response.json();
+            }).then(function(data) {
+                if (data.session_id) {
+                    sessionId = data.session_id;
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('resultsSection').classList.remove('visible');
+                    document.getElementById('spinner').classList.remove('visible');
+                }
+            });
+        }
+
+        function stopScrolling() {
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('spinner').classList.add('visible');
+
+            fetch('/stop', { method: 'POST' }).then(function(response) {
+                return response.json();
+            }).then(function() {
+                document.getElementById('startBtn').disabled = false;
+            });
+        }
+
+        function renderClusters(clusters) {
+            var container = document.getElementById('clustersContainer');
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+
+            var section = document.getElementById('resultsSection');
+            section.classList.add('visible');
+
+            if (clusters.length === 0) {
+                var noResults = document.createElement('p');
+                noResults.style.cssText = 'color: #888; padding: 16px;';
+                noResults.textContent = 'No significant pain points found in the collected comments.';
+                container.appendChild(noResults);
+                return;
+            }
+
+            for (var i = 0; i < clusters.length; i++) {
+                var cluster = clusters[i];
+                var potentialClass = cluster.potential === 'MEDIUM' ? 'medium' : cluster.potential === 'LOW' ? 'low' : '';
+
+                var el = document.createElement('div');
+                el.className = 'cluster ' + potentialClass;
+
+                var header = document.createElement('div');
+                header.className = 'cluster-header';
+
+                var info = document.createElement('div');
+
+                var theme = document.createElement('div');
+                theme.className = 'cluster-theme';
+                theme.textContent = cluster.theme;
+                info.appendChild(theme);
+
+                var meta = document.createElement('div');
+                meta.className = 'cluster-meta';
+                meta.textContent = cluster.comment_count + ' comments across ' + cluster.video_count + ' videos';
+                info.appendChild(meta);
+
+                header.appendChild(info);
+
+                var badge = document.createElement('div');
+                badge.className = 'cluster-badge ' + cluster.potential;
+                badge.textContent = cluster.potential + ' POTENTIAL';
+                header.appendChild(badge);
+
+                el.appendChild(header);
+
+                var summary = document.createElement('div');
+                summary.className = 'cluster-summary';
+                summary.textContent = cluster.summary;
+                el.appendChild(summary);
+
+                var idea = document.createElement('div');
+                idea.className = 'cluster-idea';
+                idea.textContent = '\uD83D\uDCA1 ' + cluster.app_idea;
+                el.appendChild(idea);
+
+                container.appendChild(el);
+            }
+        }
+
+        document.getElementById('startBtn').addEventListener('click', startScrolling);
+        document.getElementById('stopBtn').addEventListener('click', stopScrolling);
+
+        addLogEntry(new Date().toISOString(), 'Ready \u2014 press Start to begin scrolling');
+        connectWebSocket();
+
+        fetch('/config').then(function(r) { return r.json(); }).then(function(data) {
+            document.getElementById('threshold').value = data.comment_threshold;
+        });
+    </script>
+</body>
+</html>
