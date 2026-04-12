@@ -19,6 +19,14 @@ Look for:
 - Problems that could realistically be solved with software
 - Ideas where people are literally asking for a solution
 
+HARD FILTER — reject ideas that:
+- Can already be solved by prompting ChatGPT, Claude, or any general-purpose LLM (e.g. "explain this song", "summarize this", "give me advice")
+- Already have a well-known app that does exactly this (e.g. Shazam for song ID, Screen Time for phone addiction)
+- Are just "I wish I had a chatbot for X" — that's not an app, that's a prompt
+- Are too vague or generic (e.g. "help people be more productive")
+
+GOOD ideas require custom data, real-time integrations, specific workflows, or niche domain logic that a general LLM can't replicate out of the box.
+
 Ignore off-topic comments, spam, memes, and purely positive reactions.
 
 Return EXACTLY 3 ideas (or fewer if the data doesn't support 3). Rank them #1, #2, #3 by how strong the opportunity is.
