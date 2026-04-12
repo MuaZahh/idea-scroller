@@ -19,13 +19,21 @@ Look for:
 - Problems that could realistically be solved with software
 - Ideas where people are literally asking for a solution
 
-HARD FILTER — reject ideas that:
-- Can already be solved by prompting ChatGPT, Claude, or any general-purpose LLM (e.g. "explain this song", "summarize this", "give me advice")
-- Already have a well-known app that does exactly this (e.g. Shazam for song ID, Screen Time for phone addiction)
-- Are just "I wish I had a chatbot for X" — that's not an app, that's a prompt
-- Are too vague or generic (e.g. "help people be more productive")
+HARD FILTER — reject ANY idea where:
+- A user could open ChatGPT/Claude right now and get 70%+ of the value by just prompting it (e.g. "help me explain my symptoms", "give me a meal plan", "explain this topic simply"). If the core value is "ask questions and get answers", it's a prompt, not an app.
+- A well-known app already does this (Shazam, Duolingo, Screen Time, MyFitnessPal, etc.)
+- The idea is basically "chatbot + [domain]" — wrapping an LLM in a UI is not a product
+- It's too vague or generic ("help people be more productive", "wellness app")
+- The main feature is generating/summarizing text — LLMs already do this for free
 
-GOOD ideas require custom data, real-time integrations, specific workflows, or niche domain logic that a general LLM can't replicate out of the box.
+GOOD ideas MUST have at least ONE of these that an LLM fundamentally cannot do:
+- Connects to real-time external data (live prices, inventory, sensor data, APIs)
+- Requires persistent state across weeks/months that the user builds up over time AND can't just paste into a chat
+- Involves coordination between multiple people (marketplace, matching, scheduling)
+- Needs hardware/device integration (camera, location, bluetooth, notifications)
+- Has a network effect (gets better with more users)
+
+Ask yourself: "Could a smart person get this done in a 5-minute ChatGPT conversation?" If yes, REJECT IT.
 
 Ignore off-topic comments, spam, memes, and purely positive reactions.
 
