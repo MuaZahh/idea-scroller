@@ -416,12 +416,47 @@ class Scraper:
         (TikTok pre-loads them) or may arrive shortly via XHR."""
         max_comments = self._max_comments
 
-        # Wait briefly for comments to arrive if not already cached
+        # Wait for first batch to arrive
         for _ in range(5):
             cached = self._comments_by_video.get(video_id, [])
             if len(cached) >= 1:
                 break
             await asyncio.sleep(0.5)
+
+        # If we need more than what's cached, scroll the comment panel
+        # to trigger additional XHR batches (each batch is ~20 comments)
+        if len(self._comments_by_video.get(video_id, [])) < max_comments:
+            stall_count = 0
+            while stall_count < 2:
+                prev_count = len(self._comments_by_video.get(video_id, []))
+                if prev_count >= max_comments:
+                    break
+
+                # Scroll the comment panel to load more
+                try:
+                    await page.evaluate("""() => {
+                        const selectors = [
+                            'div[class*="DivCommentListContainer"]',
+                            'div[class*="DivCommentMain"]',
+                            'div[class*="CommentList"]',
+                        ];
+                        for (const sel of selectors) {
+                            const el = document.querySelector(sel);
+                            if (el && el.scrollHeight > el.clientHeight) {
+                                el.scrollTop = el.scrollHeight;
+                                return;
+                            }
+                        }
+                    }""")
+                except Exception:
+                    pass
+
+                await asyncio.sleep(1)
+                new_count = len(self._comments_by_video.get(video_id, []))
+                if new_count == prev_count:
+                    stall_count += 1
+                else:
+                    stall_count = 0
 
         raw_comments = self._comments_by_video.get(video_id, [])
 
