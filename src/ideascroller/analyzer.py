@@ -66,7 +66,9 @@ def build_analysis_prompt(videos: list[Video], comments: list[Comment]) -> str:
 
 class Analyzer:
     def __init__(self, api_key: str) -> None:
-        self._client = AsyncAnthropic(api_key=api_key)
+        # Strip whitespace, newlines, and surrounding quotes from the key
+        clean_key = api_key.strip().strip('"').strip("'").strip()
+        self._client = AsyncAnthropic(api_key=clean_key)
 
     async def analyze(
         self,

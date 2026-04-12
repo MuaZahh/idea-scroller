@@ -348,7 +348,20 @@ class Scraper:
     ) -> None:
         self._intercepted_comments.clear()
 
-        # Click the comment button INSIDE this specific article
+        # Close any existing comment panel first (prevents toggle-close)
+        try:
+            is_open = await page.evaluate("""() => {
+                const panel = document.querySelector('div[class*="DivCommentListContainer"]')
+                    || document.querySelector('div[class*="DivCommentMain"]');
+                return panel !== null && panel.offsetHeight > 0;
+            }""")
+            if is_open:
+                await page.keyboard.press("Escape")
+                await asyncio.sleep(0.5)
+        except Exception:
+            pass
+
+        # Now click the comment button INSIDE this specific article
         opened = await self._click_comment_button_in_article(page, article_id)
         if not opened:
             self._log("Failed to open comment panel")
