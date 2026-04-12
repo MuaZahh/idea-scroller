@@ -103,6 +103,79 @@ class Scraper:
         except Exception as e:
             logger.debug("Failed to parse response %s: %s", url[:80], e)
 
+    async def _extract_initial_items(self, page: Page) -> None:
+        """Extract video items from TikTok's server-side rendered data.
+
+        The first batch of FYP videos is embedded in the HTML (not via XHR),
+        so the response interceptor misses them. This parses them from
+        script tags or the window's state.
+        """
+        try:
+            items = await page.evaluate("""() => {
+                // Try various TikTok state locations
+                const locations = [
+                    // SIGI_STATE (older TikTok)
+                    () => {
+                        if (window.SIGI_STATE?.ItemModule) {
+                            return Object.values(window.SIGI_STATE.ItemModule);
+                        }
+                    },
+                    // __UNIVERSAL_DATA_FOR_REHYDRATION__ (current TikTok)
+                    () => {
+                        const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+                        if (!el) return null;
+                        const data = JSON.parse(el.textContent);
+                        const scope = data['__DEFAULT_SCOPE__'] || {};
+                        // Search all keys for itemList arrays
+                        for (const val of Object.values(scope)) {
+                            if (val && val.itemList && Array.isArray(val.itemList)) {
+                                return val.itemList;
+                            }
+                        }
+                    },
+                    // React fiber state on feed containers
+                    () => {
+                        const items = [];
+                        const articles = document.querySelectorAll(
+                            'article[data-e2e="recommend-list-item-container"]'
+                        );
+                        for (const art of articles) {
+                            const fiberKey = Object.keys(art).find(
+                                k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance')
+                            );
+                            if (fiberKey) {
+                                let fiber = art[fiberKey];
+                                // Walk up to find the item data
+                                for (let i = 0; i < 15 && fiber; i++) {
+                                    const props = fiber.memoizedProps || fiber.pendingProps;
+                                    if (props?.item?.id || props?.data?.id) {
+                                        items.push(props.item || props.data);
+                                        break;
+                                    }
+                                    fiber = fiber.return;
+                                }
+                            }
+                        }
+                        return items.length > 0 ? items : null;
+                    },
+                ];
+                for (const loc of locations) {
+                    try {
+                        const result = loc();
+                        if (result && result.length > 0) return result;
+                    } catch(e) {}
+                }
+                return [];
+            }""")
+
+            if items:
+                self._intercepted_video_items.extend(items)
+                self._log(f"Extracted {len(items)} initial video items from page")
+            else:
+                self._log("No initial video items found in page data (first few videos may lack IDs)")
+        except Exception as e:
+            logger.debug("Failed to extract initial items: %s", e)
+
     @staticmethod
     def _find_chrome_binary() -> str:
         """Find the real Chrome binary on macOS."""
@@ -294,6 +367,11 @@ class Scraper:
             self._log("Navigating to TikTok FYP...")
             await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
             await asyncio.sleep(3)
+
+            # Extract initial video items from the page's SSR data
+            # The first batch of videos is rendered server-side and won't
+            # appear in XHR intercepts, so we parse them from embedded scripts
+            await self._extract_initial_items(page)
 
             self._log("Starting scroll loop...")
             last_article_id = ""
