@@ -263,6 +263,7 @@ class Scraper:
 
             self._log("Starting scroll loop...")
             last_article_id = ""
+            panel_is_open = False
 
             while not self._stop_event.is_set():
                 # 1. READ the video that is currently on screen
@@ -275,7 +276,6 @@ class Scraper:
 
                 # Skip if we already processed this exact article
                 if article_id and article_id == last_article_id:
-                    # Same article — just scroll
                     await page.keyboard.press("ArrowDown")
                     await asyncio.sleep(1.5)
                     continue
@@ -295,25 +295,21 @@ class Scraper:
                 )
                 self._update_stats()
 
-                # 3. CHECK threshold — if below, scroll to next
-                if comment_count < self._threshold:
+                # 3. CHECK — should we scrape this video?
+                should_scrape = (
+                    comment_count >= self._threshold
+                    and video_id is not None
+                    and not any(v.id == video_id for v in self._videos)
+                )
+
+                if not should_scrape:
+                    if comment_count >= self._threshold and not video_id:
+                        self._log(f"No video ID for @{author}, skipping")
                     await page.keyboard.press("ArrowDown")
                     await asyncio.sleep(1.5)
                     continue
 
-                # 4. SCRAPE this video — do NOT scroll until done
-                if not video_id:
-                    self._log(f"No video ID for @{author}, skipping")
-                    await page.keyboard.press("ArrowDown")
-                    await asyncio.sleep(1.5)
-                    continue
-
-                if any(v.id == video_id for v in self._videos):
-                    self._log(f"Already scraped {video_id}, skipping")
-                    await page.keyboard.press("ArrowDown")
-                    await asyncio.sleep(1.5)
-                    continue
-
+                # 4. SCRAPE this video
                 video = Video(
                     id=video_id,
                     session_id=session_id,
@@ -328,10 +324,12 @@ class Scraper:
                 self._log(
                     f">>> Scraping @{author} ({comment_count} comments)..."
                 )
-                await self._scrape_comments(page, video_id, article_id)
+                panel_is_open = await self._scrape_comments(
+                    page, video_id, article_id, panel_is_open
+                )
                 self._update_stats()
 
-                # 5. DONE scraping — NOW scroll to next video
+                # 5. Scroll to next video (panel stays open)
                 await page.keyboard.press("ArrowDown")
                 await asyncio.sleep(1.5)
 
@@ -344,33 +342,26 @@ class Scraper:
 
     async def _scrape_comments(
         self, page: Page, video_id: str, article_id: str,
+        panel_is_open: bool,
         max_comments: int = 30,
-    ) -> None:
+    ) -> bool:
+        """Scrape comments from the current video. Returns True if panel is open after."""
         self._intercepted_comments.clear()
 
-        # Close any existing comment panel first (prevents toggle-close)
-        try:
-            is_open = await page.evaluate("""() => {
-                const panel = document.querySelector('div[class*="DivCommentListContainer"]')
-                    || document.querySelector('div[class*="DivCommentMain"]');
-                return panel !== null && panel.offsetHeight > 0;
-            }""")
-            if is_open:
-                await page.keyboard.press("Escape")
-                await asyncio.sleep(0.5)
-        except Exception:
-            pass
+        if not panel_is_open:
+            # First time — open the comment panel
+            opened = await self._click_comment_button_in_article(page, article_id)
+            if not opened:
+                self._log("Failed to open comment panel")
+                return False
+            await asyncio.sleep(2)
+        else:
+            # Panel is already open from previous video — TikTok auto-loads
+            # new comments when you scroll to a new video with panel open.
+            # Just wait for the new comments to arrive via XHR.
+            await asyncio.sleep(2)
 
-        # Now click the comment button INSIDE this specific article
-        opened = await self._click_comment_button_in_article(page, article_id)
-        if not opened:
-            self._log("Failed to open comment panel")
-            return
-
-        await asyncio.sleep(2)
-
-        # Wait for first batch of comments (the initial XHR fires on panel open)
-        # Then scroll only if we need more
+        # Wait for comments to load, scroll panel if needed
         stall_count = 0
         max_stalls = 2
 
@@ -421,9 +412,5 @@ class Scraper:
         collected = min(len(self._intercepted_comments), max_comments)
         self._log(f"Collected {collected} comments")
 
-        # Close comment panel
-        try:
-            await page.keyboard.press("Escape")
-            await asyncio.sleep(1)
-        except Exception:
-            pass
+        # Keep the panel open — it will auto-update for the next video
+        return True
