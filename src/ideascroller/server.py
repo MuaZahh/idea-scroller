@@ -73,10 +73,39 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
         _state.scrape_task = None
         _state.manager = ConnectionManager()
         yield
+        # Graceful shutdown — stop scraper and save collected data
+        logger.info("Shutting down — saving session data...")
         if _state.scraper:
             _state.scraper.stop()
         if _state.scrape_task and not _state.scrape_task.done():
-            _state.scrape_task.cancel()
+            try:
+                await asyncio.wait_for(_state.scrape_task, timeout=10)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+        # Save any unsaved data from the scraper
+        if _state.scraper and _state.current_session_id:
+            try:
+                for video in _state.scraper.videos:
+                    await _state.db.save_video(video)
+                if _state.scraper.comments:
+                    await _state.db.save_comments(_state.scraper.comments)
+                session = await _state.db.get_session(_state.current_session_id)
+                if session:
+                    updated = session.model_copy(update={
+                        "status": SessionStatus.ERROR,
+                        "stopped_at": datetime.datetime.now(),
+                        "videos_scanned": _state.scraper.videos_scanned,
+                        "videos_scraped": _state.scraper.videos_scraped,
+                        "total_comments": len(_state.scraper.comments),
+                    })
+                    await _state.db.update_session(updated)
+                logger.info(
+                    "Saved %d videos, %d comments before shutdown",
+                    len(_state.scraper.videos),
+                    len(_state.scraper.comments),
+                )
+            except Exception as e:
+                logger.error("Failed to save data on shutdown: %s", e)
         await _state.db.close()
 
     app = FastAPI(title="IdeaScroller", lifespan=lifespan)
