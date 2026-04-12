@@ -31,9 +31,13 @@ def parse_comment_count(text: str) -> int:
 
 
 class Scraper:
-    def __init__(self, chrome_user_data_dir: str, comment_threshold: int = 300,
-                 on_log: Optional[Callable[[str], None]] = None,
-                 on_stats_update: Optional[Callable[[int, int, int], None]] = None) -> None:
+    def __init__(
+        self,
+        chrome_user_data_dir: str,
+        comment_threshold: int = 300,
+        on_log: Optional[Callable[[str], None]] = None,
+        on_stats_update: Optional[Callable[[int, int, int], None]] = None,
+    ) -> None:
         self._chrome_dir = chrome_user_data_dir
         self._threshold = comment_threshold
         self._on_log = on_log or (lambda msg: None)
@@ -70,138 +74,72 @@ class Scraper:
         self._on_log(message)
 
     def _update_stats(self) -> None:
-        self._on_stats_update(self._videos_scanned, self._videos_scraped, len(self._comments))
+        self._on_stats_update(
+            self._videos_scanned, self._videos_scraped, len(self._comments)
+        )
 
     async def _handle_response(self, response: Response) -> None:
         url = response.url
         try:
-            if "/api/post/item_list/" in url or "/api/recommend/item_list/" in url or "/api/preload/item_list/" in url:
+            if (
+                "/api/post/item_list/" in url
+                or "/api/recommend/item_list/" in url
+                or "/api/preload/item_list/" in url
+            ):
                 body = await response.json()
                 items = body.get("itemList", [])
                 if items:
                     self._intercepted_video_items.extend(items)
-                    self._log(f"Intercepted {len(items)} video items from API (total: {len(self._intercepted_video_items)})")
+                    self._log(
+                        f"Intercepted {len(items)} video items (total: {len(self._intercepted_video_items)})"
+                    )
             elif "/api/comment/list/" in url:
                 body = await response.json()
                 comments_data = body.get("comments", [])
                 if comments_data:
                     self._intercepted_comments.extend(comments_data)
         except Exception as e:
-            logger.debug("Failed to parse intercepted response %s: %s", url[:100], e)
+            logger.debug("Failed to parse response %s: %s", url[:80], e)
 
     @staticmethod
     def _get_profile_dir(chrome_user_data_dir: str) -> str:
-        """Get a dedicated Playwright profile directory.
-
-        We use a persistent profile at ~/.ideascroller/profile so the user
-        only needs to log into TikTok once. Playwright's bundled Chromium
-        can't use the real Chrome profile (different encryption keys), so
-        this is a separate profile managed by Playwright.
-        """
         profile_dir = Path.home() / ".ideascroller" / "profile"
         profile_dir.mkdir(parents=True, exist_ok=True)
         return str(profile_dir)
 
-    async def run(self, session_id: str) -> None:
-        """Main scroll loop — runs until stop() is called."""
-        profile_dir = self._get_profile_dir(self._chrome_dir)
-        self._log("Launching browser...")
+    # ------------------------------------------------------------------
+    # DOM helpers — all scoped to the VISIBLE article element
+    # ------------------------------------------------------------------
 
-        async with async_playwright() as pw:
-            context = await pw.chromium.launch_persistent_context(
-                profile_dir, headless=False,
-                viewport={"width": 1280, "height": 900},
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-            page = context.pages[0] if context.pages else await context.new_page()
-            page.on("response", self._handle_response)
-            self._log("Navigating to TikTok FYP...")
-            await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
-            await asyncio.sleep(3)
+    async def _read_visible_video(self, page: Page) -> dict:
+        """Read all info from the currently visible article in ONE atomic call.
 
-            # Check if user needs to log in
-            if "login" in page.url.lower():
-                self._log("TikTok login required — please log in manually in the browser window")
-                # Wait for the user to log in (check URL every 3 seconds)
-                while "login" in page.url.lower() and not self._stop_event.is_set():
-                    await asyncio.sleep(3)
-                if self._stop_event.is_set():
-                    await context.close()
-                    return
-                self._log("Login detected! Navigating to FYP...")
-                await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
-                await asyncio.sleep(3)
-
-            self._log("Starting scroll loop...")
-            last_author: Optional[str] = None
-            while not self._stop_event.is_set():
-                # Read the currently visible video's author
-                info = await self._get_visible_video_info(page)
-                current_author = info.get("author")
-
-                # Only process if it's a new video (different author visible)
-                if current_author and current_author != last_author:
-                    last_author = current_author
-                    await self._process_current_video(page, session_id)
-
-                if self._stop_event.is_set():
-                    break
-
-                await page.keyboard.press("ArrowDown")
-                # Wait for snap animation — then poll until author changes
-                await asyncio.sleep(0.8)
-                for _ in range(5):
-                    new_info = await self._get_visible_video_info(page)
-                    if new_info.get("author") != last_author:
-                        break
-                    await asyncio.sleep(0.3)
-            self._log("Scroll loop stopped. Closing browser...")
-            await context.close()
-
-    def _find_item_by_author(self, author: str) -> Optional[dict]:
-        """Find intercepted video item by author username (primary strategy).
-
-        Searches the most recently added items first since the visible video
-        is likely from the latest batch.
-        """
-        if not author:
-            return None
-        for item in reversed(self._intercepted_video_items):
-            if item.get("author", {}).get("uniqueId") == author:
-                return item
-        return None
-
-    async def _get_visible_video_info(self, page: Page) -> dict:
-        """Extract all available info from the currently visible video in one DOM call.
-
-        Returns author, comment count text, description, and scroll index
-        all from the same visible article — guaranteeing they're from the same video.
+        Returns dict with: scrollIndex, author, commentText, desc, articleId
+        Everything comes from the same DOM element so it's always consistent.
         """
         try:
             info = await page.evaluate("""() => {
-                const articles = document.querySelectorAll('article[data-e2e="recommend-list-item-container"]');
+                const articles = document.querySelectorAll(
+                    'article[data-e2e="recommend-list-item-container"]'
+                );
                 for (const art of articles) {
                     const rect = art.getBoundingClientRect();
                     if (rect.top >= -200 && rect.top < window.innerHeight / 2) {
-                        const scrollIndex = parseInt(art.getAttribute('data-scroll-index') || '-1');
-
-                        // Author from link
                         let author = null;
-                        const authorLinks = art.querySelectorAll('a[href*="/@"]');
-                        for (const link of authorLinks) {
-                            const match = link.href.match(/\\/@([^/?]+)/);
-                            if (match) { author = match[1]; break; }
+                        const links = art.querySelectorAll('a[href*="/@"]');
+                        for (const link of links) {
+                            const m = link.href.match(/\\/@([^/?]+)/);
+                            if (m) { author = m[1]; break; }
                         }
-
-                        // Comment count
                         const countEl = art.querySelector('strong[data-e2e="comment-count"]');
-                        const commentText = countEl ? countEl.textContent : '0';
-
-                        // Description
                         const descEl = art.querySelector('div[data-e2e="video-desc"]');
-                        const desc = descEl ? descEl.textContent.substring(0, 500) : '';
-
-                        return { scrollIndex, author, commentText, desc };
+                        return {
+                            scrollIndex: parseInt(art.getAttribute('data-scroll-index') || '-1'),
+                            articleId: art.id || '',
+                            author: author,
+                            commentText: countEl ? countEl.textContent : '0',
+                            desc: descEl ? descEl.textContent.substring(0, 500) : '',
+                        };
                     }
                 }
                 return null;
@@ -210,72 +148,214 @@ class Scraper:
         except Exception:
             return {}
 
-    async def _process_current_video(self, page: Page, session_id: str) -> None:
-        self._videos_scanned += 1
+    async def _click_comment_button_in_article(self, page: Page, article_id: str) -> bool:
+        """Click the comment button INSIDE the specific article element.
 
-        # Get all info from the visible video in ONE atomic DOM read
-        info = await self._get_visible_video_info(page)
-        scroll_index = info.get("scrollIndex", -1)
-        visible_author = info.get("author")
-        comment_text = info.get("commentText", "0")
-        description = info.get("desc", "")
-        comment_count = parse_comment_count(comment_text)
+        This prevents clicking the wrong video's comment button.
+        """
+        try:
+            clicked = await page.evaluate("""(articleId) => {
+                let art = null;
+                if (articleId) {
+                    art = document.getElementById(articleId);
+                }
+                if (!art) {
+                    // Fallback: find visible article
+                    const articles = document.querySelectorAll(
+                        'article[data-e2e="recommend-list-item-container"]'
+                    );
+                    for (const a of articles) {
+                        const rect = a.getBoundingClientRect();
+                        if (rect.top >= -200 && rect.top < window.innerHeight / 2) {
+                            art = a;
+                            break;
+                        }
+                    }
+                }
+                if (!art) return false;
+                const icon = art.querySelector('span[data-e2e="comment-icon"]');
+                if (!icon) return false;
+                const btn = icon.closest('button') || icon.parentElement;
+                if (!btn) return false;
+                btn.click();
+                return true;
+            }""", article_id)
+            return clicked
+        except Exception:
+            return False
 
-        # Match by author (primary) — this is reliable because author is
-        # visible in the DOM and present in intercepted XHR data
-        item = self._find_item_by_author(visible_author)
+    # ------------------------------------------------------------------
+    # Video ID resolution
+    # ------------------------------------------------------------------
 
-        video_id: Optional[str] = None
-        if item:
-            video_id = item.get("id")
-            api_count = item.get("stats", {}).get("commentCount")
-            if api_count is not None:
-                comment_count = api_count
+    def _find_video_id(self, author: Optional[str], desc: str) -> Optional[str]:
+        """Find video ID from intercepted XHR data by matching author + description."""
+        if not author:
+            return None
 
-        if not video_id:
-            video_id = self._extract_video_id(page.url)
+        # Collect all items from this author
+        matches = [
+            item
+            for item in self._intercepted_video_items
+            if item.get("author", {}).get("uniqueId") == author
+        ]
 
-        id_info = f"id: {video_id}" if video_id else "no ID"
-        self._log(f"Video #{self._videos_scanned} @{visible_author}: {comment_count} comments ({id_info})")
-        self._update_stats()
+        if not matches:
+            return None
 
-        if comment_count < self._threshold:
-            return
-        if not video_id:
-            self._log(f"Could not find video ID for @{visible_author} (have {len(self._intercepted_video_items)} intercepted items)")
-            return
+        if len(matches) == 1:
+            return matches[0].get("id")
 
-        if any(v.id == video_id for v in self._videos):
-            self._log(f"Already scraped video {video_id}, skipping")
-            return
+        # Multiple videos by same author — disambiguate by description overlap
+        desc_words = set(desc.lower().split()) if desc else set()
+        if desc_words:
+            best_item = max(
+                matches,
+                key=lambda item: len(
+                    desc_words & set((item.get("desc") or "").lower().split())
+                ),
+            )
+            return best_item.get("id")
 
-        author = visible_author or "unknown"
-        video = Video(
-            id=video_id, session_id=session_id, author=author,
-            description=description[:500], comment_count=comment_count, url=page.url,
-        )
-        self._videos.append(video)
-        self._videos_scraped += 1
-        self._log(f"Scraping comments for video by @{author} ({comment_count} comments)...")
-        await self._scrape_comments(page, video_id)
-        self._update_stats()
+        # Can't disambiguate — return most recent
+        return matches[-1].get("id")
 
-    async def _scrape_comments(self, page: Page, video_id: str) -> None:
-        """Open comment panel, scroll to load comments via XHR, collect them."""
+    @staticmethod
+    def _extract_video_id(url: str) -> Optional[str]:
+        match = re.search(r"/video/(\d+)", url)
+        return match.group(1) if match else None
+
+    # ------------------------------------------------------------------
+    # Main run loop — strictly sequential
+    # ------------------------------------------------------------------
+
+    async def run(self, session_id: str) -> None:
+        profile_dir = self._get_profile_dir(self._chrome_dir)
+        self._log("Launching browser...")
+
+        async with async_playwright() as pw:
+            context = await pw.chromium.launch_persistent_context(
+                profile_dir,
+                headless=False,
+                viewport={"width": 1280, "height": 900},
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            page = context.pages[0] if context.pages else await context.new_page()
+            page.on("response", self._handle_response)
+
+            self._log("Navigating to TikTok FYP...")
+            await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
+            await asyncio.sleep(3)
+
+            # Handle login if needed
+            if "login" in page.url.lower():
+                self._log("TikTok login required — log in manually in the browser")
+                while "login" in page.url.lower() and not self._stop_event.is_set():
+                    await asyncio.sleep(3)
+                if self._stop_event.is_set():
+                    await context.close()
+                    return
+                self._log("Login detected! Navigating to FYP...")
+                await page.goto(
+                    "https://www.tiktok.com/foryou", wait_until="networkidle"
+                )
+                await asyncio.sleep(3)
+
+            self._log("Starting scroll loop...")
+            last_article_id = ""
+
+            while not self._stop_event.is_set():
+                # 1. READ the video that is currently on screen
+                video_info = await self._read_visible_video(page)
+                article_id = video_info.get("articleId", "")
+                author = video_info.get("author")
+                comment_text = video_info.get("commentText", "0")
+                description = video_info.get("desc", "")
+                comment_count = parse_comment_count(comment_text)
+
+                # Skip if we already processed this exact article
+                if article_id and article_id == last_article_id:
+                    # Same article — just scroll
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(1.5)
+                    continue
+
+                last_article_id = article_id
+                self._videos_scanned += 1
+
+                # 2. RESOLVE video ID
+                video_id = self._find_video_id(author, description)
+                if not video_id:
+                    video_id = self._extract_video_id(page.url)
+
+                id_str = video_id or "no ID"
+                self._log(
+                    f"Video #{self._videos_scanned} @{author}: "
+                    f"{comment_count} comments ({id_str})"
+                )
+                self._update_stats()
+
+                # 3. CHECK threshold — if below, scroll to next
+                if comment_count < self._threshold:
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(1.5)
+                    continue
+
+                # 4. SCRAPE this video — do NOT scroll until done
+                if not video_id:
+                    self._log(f"No video ID for @{author}, skipping")
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(1.5)
+                    continue
+
+                if any(v.id == video_id for v in self._videos):
+                    self._log(f"Already scraped {video_id}, skipping")
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(1.5)
+                    continue
+
+                video = Video(
+                    id=video_id,
+                    session_id=session_id,
+                    author=author or "unknown",
+                    description=description[:500],
+                    comment_count=comment_count,
+                    url=page.url,
+                )
+                self._videos.append(video)
+                self._videos_scraped += 1
+
+                self._log(
+                    f">>> Scraping @{author} ({comment_count} comments)..."
+                )
+                await self._scrape_comments(page, video_id, article_id)
+                self._update_stats()
+
+                # 5. DONE scraping — NOW scroll to next video
+                await page.keyboard.press("ArrowDown")
+                await asyncio.sleep(1.5)
+
+            self._log("Scroll loop stopped. Closing browser...")
+            await context.close()
+
+    # ------------------------------------------------------------------
+    # Comment scraping — scoped to the correct article
+    # ------------------------------------------------------------------
+
+    async def _scrape_comments(
+        self, page: Page, video_id: str, article_id: str
+    ) -> None:
         self._intercepted_comments.clear()
 
-        # Click the comment icon's parent button
-        # The comment icon is span[data-e2e="comment-icon"] inside an unlabeled BUTTON
-        try:
-            comment_icon = page.locator('span[data-e2e="comment-icon"]').first
-            parent_btn = comment_icon.locator('..')
-            await parent_btn.click(timeout=3000)
-            await asyncio.sleep(1.5)
-        except Exception as e:
-            self._log(f"Failed to open comment panel: {e}")
+        # Click the comment button INSIDE this specific article
+        opened = await self._click_comment_button_in_article(page, article_id)
+        if not opened:
+            self._log("Failed to open comment panel")
             return
 
-        # Scroll the comment panel to load more comments
+        await asyncio.sleep(2)
+
+        # Scroll the comment panel to load more comments via XHR
         prev_count = 0
         stall_count = 0
         max_stalls = 3
@@ -283,59 +363,53 @@ class Scraper:
         while stall_count < max_stalls:
             current_count = len(self._intercepted_comments)
             if current_count > prev_count:
+                self._log(f"  ...{current_count} comments loaded")
                 prev_count = current_count
                 stall_count = 0
-                self._log(f"  ...loaded {current_count} comments so far")
             else:
                 stall_count += 1
 
             try:
                 await page.evaluate("""() => {
-                    // Find the comment panel scrollable container
                     const selectors = [
                         'div[class*="DivCommentListContainer"]',
                         'div[class*="DivCommentMain"]',
                         'div[class*="CommentList"]',
                     ];
                     for (const sel of selectors) {
-                        const panel = document.querySelector(sel);
-                        if (panel && panel.scrollHeight > panel.clientHeight) {
-                            panel.scrollTop = panel.scrollHeight;
-                            return true;
+                        const el = document.querySelector(sel);
+                        if (el && el.scrollHeight > el.clientHeight) {
+                            el.scrollTop = el.scrollHeight;
+                            return;
                         }
                     }
-                    return false;
                 }""")
             except Exception:
                 pass
 
             await asyncio.sleep(1)
 
-        # Convert intercepted comments to our model
-        for raw_comment in self._intercepted_comments:
+        # Store collected comments
+        for raw in self._intercepted_comments:
             try:
-                comment = Comment(
-                    id=raw_comment.get("cid", ""),
-                    video_id=video_id,
-                    text=raw_comment.get("text", ""),
-                    author=raw_comment.get("user", {}).get("unique_id", "unknown"),
-                    likes=raw_comment.get("digg_count", 0),
-                    reply_count=raw_comment.get("reply_comment_total", 0),
+                self._comments.append(
+                    Comment(
+                        id=raw.get("cid", ""),
+                        video_id=video_id,
+                        text=raw.get("text", ""),
+                        author=raw.get("user", {}).get("unique_id", "unknown"),
+                        likes=raw.get("digg_count", 0),
+                        reply_count=raw.get("reply_comment_total", 0),
+                    )
                 )
-                self._comments.append(comment)
             except Exception as e:
                 logger.debug("Failed to parse comment: %s", e)
 
-        self._log(f"Collected {len(self._intercepted_comments)} comments from video {video_id}")
+        self._log(f"Collected {len(self._intercepted_comments)} comments")
 
         # Close comment panel
         try:
             await page.keyboard.press("Escape")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
         except Exception:
             pass
-
-    @staticmethod
-    def _extract_video_id(url: str) -> Optional[str]:
-        match = re.search(r"/video/(\d+)", url)
-        return match.group(1) if match else None
