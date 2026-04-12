@@ -3,6 +3,9 @@
 import asyncio
 import logging
 import re
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Callable, Optional
 
 from playwright.async_api import Page, Response, async_playwright
@@ -86,27 +89,74 @@ class Scraper:
         except Exception as e:
             logger.debug("Failed to parse intercepted response: %s", e)
 
+    def _copy_chrome_profile(self) -> str:
+        """Copy essential Chrome profile data to a temp directory.
+
+        Chrome locks its user data directory, so we can't use it directly
+        while Chrome is running. This copies cookies and login state to a
+        temporary profile that Playwright can use.
+        """
+        source = Path(self._chrome_dir) / "Default"
+        tmp_dir = tempfile.mkdtemp(prefix="ideascroller_")
+        dest = Path(tmp_dir) / "Default"
+        dest.mkdir(parents=True, exist_ok=True)
+
+        # Copy only the files needed for login state — skip large caches
+        essential_files = [
+            "Cookies", "Cookies-journal",
+            "Login Data", "Login Data-journal",
+            "Web Data", "Web Data-journal",
+            "Preferences", "Secure Preferences",
+            "Local State",
+        ]
+        essential_dirs = ["Local Storage", "Session Storage", "IndexedDB"]
+
+        # Copy Local State from parent (needed for cookie decryption)
+        local_state = Path(self._chrome_dir) / "Local State"
+        if local_state.exists():
+            shutil.copy2(str(local_state), tmp_dir)
+
+        for filename in essential_files:
+            src_file = source / filename
+            if src_file.exists():
+                shutil.copy2(str(src_file), str(dest / filename))
+
+        for dirname in essential_dirs:
+            src_dir = source / dirname
+            if src_dir.exists():
+                shutil.copytree(str(src_dir), str(dest / dirname), dirs_exist_ok=True)
+
+        return tmp_dir
+
     async def run(self, session_id: str) -> None:
-        self._log("Launching browser...")
-        async with async_playwright() as pw:
-            context = await pw.chromium.launch_persistent_context(
-                self._chrome_dir, headless=False,
-                viewport={"width": 1280, "height": 900},
-                args=["--disable-blink-features=AutomationControlled"])
-            page = context.pages[0] if context.pages else await context.new_page()
-            page.on("response", self._handle_response)
-            self._log("Navigating to TikTok FYP...")
-            await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
-            await asyncio.sleep(3)
-            self._log("Starting scroll loop...")
-            while not self._stop_event.is_set():
-                await self._process_current_video(page, session_id)
-                if self._stop_event.is_set():
-                    break
-                await page.keyboard.press("ArrowDown")
-                await asyncio.sleep(2)
-            self._log("Scroll loop stopped. Closing browser...")
-            await context.close()
+        """Main scroll loop — runs until stop() is called."""
+        self._log("Copying Chrome profile for isolated browser session...")
+        tmp_profile = self._copy_chrome_profile()
+
+        try:
+            self._log("Launching browser...")
+            async with async_playwright() as pw:
+                context = await pw.chromium.launch_persistent_context(
+                    tmp_profile, headless=False,
+                    viewport={"width": 1280, "height": 900},
+                    args=["--disable-blink-features=AutomationControlled"])
+                page = context.pages[0] if context.pages else await context.new_page()
+                page.on("response", self._handle_response)
+                self._log("Navigating to TikTok FYP...")
+                await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
+                await asyncio.sleep(3)
+                self._log("Starting scroll loop...")
+                while not self._stop_event.is_set():
+                    await self._process_current_video(page, session_id)
+                    if self._stop_event.is_set():
+                        break
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(2)
+                self._log("Scroll loop stopped. Closing browser...")
+                await context.close()
+        finally:
+            # Clean up temp profile
+            shutil.rmtree(tmp_profile, ignore_errors=True)
 
     async def _process_current_video(self, page: Page, session_id: str) -> None:
         self._videos_scanned += 1

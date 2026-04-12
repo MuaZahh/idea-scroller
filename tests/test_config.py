@@ -3,11 +3,13 @@ from unittest.mock import patch
 
 
 def test_default_settings():
+    """Settings should have sensible defaults when no env vars or .env file."""
     with patch.dict(os.environ, {}, clear=True):
         from importlib import reload
         import ideascroller.config as config_module
         reload(config_module)
-        settings = config_module.Settings()
+        # Pass _env_file=None to skip reading .env from disk
+        settings = config_module.Settings(_env_file=None)
 
     assert settings.comment_threshold == 300
     assert settings.host == "127.0.0.1"
