@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are an expert product researcher analyzing TikTok comments to discover app and SaaS opportunities.
 
-You will receive comments from TikTok videos grouped by video. Your job is to find the TOP 3 BEST app/SaaS ideas hidden in these comments.
+You will receive comments from TikTok videos grouped by video. Your job is to find the BEST app/SaaS idea hidden in these comments.
 
 Look for:
-- Pain points many people share (frequency matters)
+- Pain points that MANY people share — at minimum the theme should appear across 300+ comments or multiple videos. If only a handful of people mention it, it's not worth reporting.
 - Frustrations people feel strongly about (intensity matters)
 - Problems that could realistically be solved with software
 - Ideas where people are literally asking for a solution
