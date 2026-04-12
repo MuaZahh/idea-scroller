@@ -50,7 +50,8 @@ class Scraper:
         self._videos_scanned = 0
         self._videos_scraped = 0
         self._intercepted_video_items: list[dict] = []
-        self._intercepted_comments: list[dict] = []
+        # Comments keyed by aweme_id — TikTok pre-loads them before we scroll
+        self._comments_by_video: dict[str, list[dict]] = {}
 
     @property
     def videos(self) -> list[Video]:
@@ -96,10 +97,20 @@ class Scraper:
                         f"Intercepted {len(items)} video items (total: {len(self._intercepted_video_items)})"
                     )
             elif "/api/comment/list/" in url:
+                # Extract aweme_id from URL to key comments by video
+                aweme_match = re.search(r"aweme_id=(\d+)", url)
+                if not aweme_match:
+                    return
+                aweme_id = aweme_match.group(1)
                 body = await response.json()
                 comments_data = body.get("comments", [])
                 if comments_data:
-                    self._intercepted_comments.extend(comments_data)
+                    existing = self._comments_by_video.get(aweme_id, [])
+                    self._comments_by_video[aweme_id] = [*existing, *comments_data]
+                    self._log(
+                        f"Got {len(comments_data)} comments for video {aweme_id} "
+                        f"(total: {len(self._comments_by_video[aweme_id])})"
+                    )
         except Exception as e:
             logger.debug("Failed to parse response %s: %s", url[:80], e)
 
@@ -469,25 +480,20 @@ class Scraper:
     async def _collect_comments(
         self, page: Page, video_id: str, max_comments: int = 30,
     ) -> None:
-        """Collect comments from XHR intercepts. Panel is already open."""
-        self._intercepted_comments.clear()
+        """Collect comments for a video. Comments may already be in the cache
+        (TikTok pre-loads them) or may arrive shortly via XHR."""
 
-        # Wait for the comment XHR to fire (TikTok loads comments
-        # automatically when the panel is open and a new video is shown)
-        stall_count = 0
-        max_stalls = 3
+        # Wait briefly for comments to arrive if not already cached
+        for _ in range(5):
+            cached = self._comments_by_video.get(video_id, [])
+            if len(cached) >= 1:
+                break
+            await asyncio.sleep(0.5)
 
-        while stall_count < max_stalls and len(self._intercepted_comments) < max_comments:
-            prev_count = len(self._intercepted_comments)
-            await asyncio.sleep(1)
+        raw_comments = self._comments_by_video.get(video_id, [])
 
-            if len(self._intercepted_comments) == prev_count:
-                stall_count += 1
-            else:
-                stall_count = 0
-
-        # Store collected comments (capped at max_comments)
-        for raw in self._intercepted_comments[:max_comments]:
+        # Store comments (capped at max_comments)
+        for raw in raw_comments[:max_comments]:
             try:
                 self._comments.append(
                     Comment(
@@ -502,5 +508,5 @@ class Scraper:
             except Exception as e:
                 logger.debug("Failed to parse comment: %s", e)
 
-        collected = min(len(self._intercepted_comments), max_comments)
+        collected = min(len(raw_comments), max_comments)
         self._log(f"Collected {collected} comments")
