@@ -60,7 +60,8 @@ async def test_full_flow_with_mock_scraper_and_analyzer(integration_app, integra
     })
 
     with patch("ideascroller.server.Scraper") as MockScraper, \
-         patch("ideascroller.analyzer.AsyncAnthropic") as MockAnthropic:
+         patch("anthropic.AsyncAnthropic") as MockAnthropic, \
+         patch("ideascroller.server._get_api_key", return_value="test-key"):
 
         mock_scraper = MagicMock()
 

@@ -63,19 +63,27 @@ _state = AppState()
 
 
 def _get_api_key() -> str:
-    """Read API key fresh — not from cached Settings."""
-    # Check env var first
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    """Read API key fresh from .env file every time."""
+    # Try multiple locations for .env
+    candidates = [
+        Path.cwd() / ".env",
+        Path(__file__).parent.parent.parent / ".env",  # src/ideascroller/../../.env
+    ]
+    for env_path in candidates:
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if line.startswith("ANTHROPIC_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'").strip()
+                    if key:
+                        logger.info("API key loaded from %s: %s...%s", env_path, key[:10], key[-5:])
+                        return key
+    # Fallback to env var
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if key:
-        return key.strip().strip('"').strip("'").strip()
-    # Read from .env file directly
-    env_path = Path.cwd() / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            if line.startswith("ANTHROPIC_API_KEY="):
-                key = line.split("=", 1)[1].strip().strip('"').strip("'").strip()
-                return key
-    return ""
+        logger.info("API key from env var: %s...%s", key[:10], key[-5:])
+    else:
+        logger.error("No ANTHROPIC_API_KEY found in .env or environment")
+    return key
 
 
 def create_app(db_path: str = "ideascroller.db") -> FastAPI:
@@ -131,10 +139,33 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                         await _state.db.update_session(updated)
 
                     try:
-                        analyzer = Analyzer(api_key=_get_api_key())
                         videos = await _state.db.get_videos(session_id)
                         comments = await _state.db.get_session_comments(session_id)
-                        result = await analyzer.analyze(session_id, videos, comments)
+
+                        from anthropic import AsyncAnthropic
+                        from ideascroller.analyzer import build_analysis_prompt, _SYSTEM_PROMPT
+                        import json as _json
+
+                        client = AsyncAnthropic(api_key=api_key)
+                        logger.info("Calling Claude with key: %s...%s", api_key[:10], api_key[-5:])
+                        prompt = build_analysis_prompt(videos, comments)
+                        response = await client.messages.create(
+                            model="claude-sonnet-4-6",
+                            max_tokens=4096,
+                            system=_SYSTEM_PROMPT,
+                            messages=[{"role": "user", "content": prompt}],
+                        )
+                        raw_text = response.content[0].text
+                        json_text = raw_text.strip()
+                        if json_text.startswith("```"):
+                            json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
+                        if json_text.endswith("```"):
+                            json_text = json_text[:-3]
+                        parsed = _json.loads(json_text.strip())
+
+                        from ideascroller.models import AnalysisCluster, AnalysisResult
+                        clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
+                        result = AnalysisResult(session_id=session_id, clusters=clusters, raw_response=raw_text)
                         await _state.db.save_analysis(result)
 
                         logger.info("Analysis complete! %d clusters found", len(result.clusters))
@@ -279,10 +310,36 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
         })
 
         try:
-            analyzer = Analyzer(api_key=_get_api_key())
+            api_key = _get_api_key()
             videos = await _state.db.get_videos(session_id)
             comments = await _state.db.get_session_comments(session_id)
-            result = await analyzer.analyze(session_id, videos, comments)
+
+            # Call Claude directly — no wrapper class
+            from anthropic import AsyncAnthropic
+            client = AsyncAnthropic(api_key=api_key)
+            logger.info("Calling Claude with key: %s...%s", api_key[:10], api_key[-5:])
+
+            from ideascroller.analyzer import build_analysis_prompt, _SYSTEM_PROMPT
+            prompt = build_analysis_prompt(videos, comments)
+            import json as _json
+
+            response = await client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=4096,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw_text = response.content[0].text
+            json_text = raw_text.strip()
+            if json_text.startswith("```"):
+                json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
+            if json_text.endswith("```"):
+                json_text = json_text[:-3]
+            parsed = _json.loads(json_text.strip())
+
+            from ideascroller.models import AnalysisCluster, AnalysisResult
+            clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
+            result = AnalysisResult(session_id=session_id, clusters=clusters, raw_response=raw_text)
             await _state.db.save_analysis(result)
 
             session = await _state.db.get_session(session_id)
