@@ -40,7 +40,7 @@ Examples of BAD ideas (people already use ChatGPT for this):
 
 Ignore off-topic comments, spam, memes, and purely positive reactions.
 
-Return EXACTLY 3 ideas (or fewer if the data doesn't support 3). Rank them #1, #2, #3 by how strong the opportunity is.
+Return only the SINGLE BEST idea you can find. If there's genuinely a second or third strong one, include those too — but don't pad it. One great idea beats three mediocre ones.
 
 Respond with ONLY valid JSON:
 {
@@ -59,11 +59,11 @@ Respond with ONLY valid JSON:
 
 _MERGE_PROMPT = """You are merging multiple batches of pain point analysis from TikTok comments.
 
-Below are the top ideas from each batch. Pick the BEST 3 overall:
+Below are the top ideas from each batch. Pick the SINGLE BEST one overall.
 - Combine clusters with the same or very similar themes
 - Sum up comment_count and video_count for merged clusters
 - Keep the best sample_comments
-- Return EXACTLY 3 ideas ranked #1, #2, #3
+- Include a second or third only if they're genuinely strong — don't pad
 
 Respond with ONLY valid JSON:
 {
