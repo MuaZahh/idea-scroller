@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -61,6 +62,22 @@ class AppState:
 _state = AppState()
 
 
+def _get_api_key() -> str:
+    """Read API key fresh — not from cached Settings."""
+    # Check env var first
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if key:
+        return key.strip().strip('"').strip("'").strip()
+    # Read from .env file directly
+    env_path = Path.cwd() / ".env"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if line.startswith("ANTHROPIC_API_KEY="):
+                key = line.split("=", 1)[1].strip().strip('"').strip("'").strip()
+                return key
+    return ""
+
+
 def create_app(db_path: str = "ideascroller.db") -> FastAPI:
 
     @asynccontextmanager
@@ -99,7 +116,8 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                 )
 
                 # Run Claude analysis if we have comments
-                if _state.scraper.comments and _state.settings.anthropic_api_key:
+                api_key = _get_api_key()
+                if _state.scraper.comments and api_key:
                     logger.info("Running Claude analysis before shutdown...")
                     session = await _state.db.get_session(session_id)
                     if session:
@@ -113,7 +131,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                         await _state.db.update_session(updated)
 
                     try:
-                        analyzer = Analyzer(api_key=_state.settings.anthropic_api_key)
+                        analyzer = Analyzer(api_key=_get_api_key())
                         videos = await _state.db.get_videos(session_id)
                         comments = await _state.db.get_session_comments(session_id)
                         result = await analyzer.analyze(session_id, videos, comments)
@@ -140,7 +158,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                             updated = session.model_copy(update={"status": SessionStatus.ERROR})
                             await _state.db.update_session(updated)
                 else:
-                    if not _state.settings.anthropic_api_key:
+                    if not api_key:
                         logger.warning("No ANTHROPIC_API_KEY set — skipping analysis")
                     session = await _state.db.get_session(session_id)
                     if session:
@@ -261,7 +279,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
         })
 
         try:
-            analyzer = Analyzer(api_key=_state.settings.anthropic_api_key)
+            analyzer = Analyzer(api_key=_get_api_key())
             videos = await _state.db.get_videos(session_id)
             comments = await _state.db.get_session_comments(session_id)
             result = await analyzer.analyze(session_id, videos, comments)
