@@ -101,6 +101,25 @@
             display: none; padding: 24px; text-align: center; color: #888;
         }
         .analyzing-spinner.visible { display: block; }
+
+        .tabs {
+            display: flex; border-bottom: 1px solid #2a2a3e; padding: 0 24px;
+        }
+        .tab {
+            padding: 10px 20px; font-size: 13px; color: #666; cursor: pointer;
+            border-bottom: 2px solid transparent; margin-bottom: -1px;
+        }
+        .tab.active { color: #fff; border-bottom-color: #3b82f6; }
+        .tab:hover { color: #aaa; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .history-row {
+            padding: 12px 0; border-bottom: 1px solid #1a1a2e;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .history-info { color: #aaa; font-size: 13px; }
+        .history-meta { color: #555; font-size: 11px; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -116,37 +135,47 @@
         </div>
     </div>
 
-    <div class="controls">
-        <button class="btn btn-start" id="startBtn">Start</button>
-        <button class="btn btn-stop" id="stopBtn" disabled>Stop</button>
-        <div class="stats">
-            <span>Videos: <span class="value" id="videosScanned">0</span></span>
-            <span class="scraped">Scraped: <span class="value" id="videosScraped">0</span></span>
-            <span class="comments">Comments: <span class="value" id="totalComments">0</span></span>
-        </div>
+    <div class="tabs">
+        <div class="tab active" data-tab="scraper">Scraper</div>
+        <div class="tab" data-tab="history">History</div>
     </div>
 
-    <div class="log-section">
-        <div class="label">Live Log</div>
-        <div class="log-box" id="logBox"></div>
-    </div>
-
-    <div class="analyzing-spinner" id="spinner">Analyzing comments with Claude...</div>
-
-    <div class="results-section" id="resultsSection">
-        <div class="label" style="display:flex;justify-content:space-between;align-items:center;">
-            Analysis Results
-            <div style="display:flex;gap:8px;">
-                <button class="btn-export" id="exportMd">Export .md</button>
-                <button class="btn-export" id="exportJson">Export .json</button>
+    <!-- Scraper Tab -->
+    <div class="tab-content active" id="tab-scraper">
+        <div class="controls">
+            <button class="btn btn-start" id="startBtn">Start</button>
+            <button class="btn btn-stop" id="stopBtn" disabled>Stop</button>
+            <div class="stats">
+                <span>Videos: <span class="value" id="videosScanned">0</span></span>
+                <span class="scraped">Scraped: <span class="value" id="videosScraped">0</span></span>
+                <span class="comments">Comments: <span class="value" id="totalComments">0</span></span>
             </div>
         </div>
-        <div id="clustersContainer"></div>
+
+        <div class="log-section">
+            <div class="label">Live Log</div>
+            <div class="log-box" id="logBox"></div>
+        </div>
+
+        <div class="analyzing-spinner" id="spinner">Analyzing comments...</div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="label" style="display:flex;justify-content:space-between;align-items:center;">
+                Analysis Results
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-export" id="exportMd">Export .md</button>
+                    <button class="btn-export" id="exportJson">Export .json</button>
+                </div>
+            </div>
+            <div id="clustersContainer"></div>
+        </div>
     </div>
 
-    <div class="results-section" id="historySection" style="display:block;margin-top:16px;">
-        <div class="label">Past Sessions</div>
-        <div id="historyContainer" style="color:#666;font-size:13px;">Loading...</div>
+    <!-- History Tab -->
+    <div class="tab-content" id="tab-history">
+        <div style="padding: 16px 24px;">
+            <div id="historyContainer" style="color:#666;font-size:13px;">Loading...</div>
+        </div>
     </div>
 
     <script>
@@ -329,6 +358,27 @@
             a.click();
         }
 
+        // Tab switching
+        function switchTab(tabName) {
+            var tabs = document.querySelectorAll('.tab');
+            var contents = document.querySelectorAll('.tab-content');
+            for (var i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+                if (tabs[i].getAttribute('data-tab') === tabName) tabs[i].classList.add('active');
+            }
+            for (var i = 0; i < contents.length; i++) {
+                contents[i].classList.remove('active');
+                if (contents[i].id === 'tab-' + tabName) contents[i].classList.add('active');
+            }
+            if (tabName === 'history') loadHistory();
+        }
+
+        document.querySelectorAll('.tab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                switchTab(this.getAttribute('data-tab'));
+            });
+        });
+
         function loadHistory() {
             fetch('/sessions').then(function(r) { return r.json(); }).then(function(data) {
                 var container = document.getElementById('historyContainer');
@@ -340,15 +390,24 @@
                 for (var i = 0; i < data.sessions.length; i++) {
                     var s = data.sessions[i];
                     var row = document.createElement('div');
-                    row.style.cssText = 'padding:8px 0;border-bottom:1px solid #2a2a3e;display:flex;justify-content:space-between;align-items:center;';
+                    row.className = 'history-row';
 
-                    var info = document.createElement('span');
-                    var date = new Date(s.started_at).toLocaleString();
-                    info.textContent = date + ' \u2014 ' + s.videos_scraped + ' videos, ' + s.total_comments + ' comments';
+                    var infoDiv = document.createElement('div');
+                    var title = document.createElement('div');
+                    title.className = 'history-info';
+                    var date = new Date(s.started_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    title.textContent = date;
+
+                    var meta = document.createElement('div');
+                    meta.className = 'history-meta';
+                    meta.textContent = s.videos_scraped + ' videos scraped \u00B7 ' + s.total_comments + ' comments \u00B7 ' + s.status;
+
+                    infoDiv.appendChild(title);
+                    infoDiv.appendChild(meta);
 
                     var btn = document.createElement('button');
                     btn.className = 'btn-export';
-                    btn.textContent = 'View results';
+                    btn.textContent = 'View';
                     btn.setAttribute('data-session-id', s.id);
                     btn.addEventListener('click', function() {
                         var sid = this.getAttribute('data-session-id');
@@ -356,11 +415,12 @@
                             if (d.clusters) {
                                 lastClusters = d.clusters;
                                 renderClusters(d.clusters);
+                                switchTab('scraper');
                             }
                         });
                     });
 
-                    row.appendChild(info);
+                    row.appendChild(infoDiv);
                     row.appendChild(btn);
                     container.appendChild(row);
                 }
@@ -389,8 +449,6 @@
             document.getElementById('maxComments').value = data.max_comments_per_video;
             document.getElementById('maxVideos').value = data.max_videos;
         });
-
-        loadHistory();
     </script>
 </body>
 </html>
