@@ -23,11 +23,12 @@
         .header .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
         .settings { font-size: 12px; color: #888; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
         .settings label { display: flex; align-items: center; gap: 4px; }
-        .settings input {
+        .settings input, .settings select {
             background: #2a2a3e; color: #fff; border: 1px solid #3a3a4e;
-            padding: 2px 8px; border-radius: 4px; width: 55px; text-align: center;
-            font-size: 12px;
+            padding: 2px 8px; border-radius: 4px; font-size: 12px;
         }
+        .settings input { width: 55px; text-align: center; }
+        .settings select { cursor: pointer; }
         .btn-export {
             background: #2a2a3e; color: #888; border: 1px solid #3a3a4e;
             padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer;
@@ -129,9 +130,16 @@
             <div class="subtitle">TikTok pain point discovery</div>
         </div>
         <div class="settings">
+            <label>Mode:
+                <select id="modeSelect">
+                    <option value="quick">Quick (~2 min)</option>
+                    <option value="balanced" selected>Balanced (~5 min)</option>
+                    <option value="thorough">Thorough (~15 min)</option>
+                </select>
+            </label>
             <label>Min comments: <input type="number" id="threshold" value="300" min="1"></label>
-            <label>Per video: <input type="number" id="maxComments" value="30" min="1"></label>
-            <label>Max videos: <input type="number" id="maxVideos" value="0" min="0" title="0 = unlimited"></label>
+            <label>Per video: <input type="number" id="maxComments" value="50" min="1"></label>
+            <label>Max videos: <input type="number" id="maxVideos" value="30" min="0" title="0 = unlimited"></label>
         </div>
     </div>
 
@@ -435,6 +443,25 @@
             lastClusters = clusters;
             _origRenderClusters(clusters);
         };
+
+        // Mode presets
+        var modePresets = {
+            quick:    { threshold: 500,  maxComments: 20,  maxVideos: 15  },
+            balanced: { threshold: 300,  maxComments: 50,  maxVideos: 30  },
+            thorough: { threshold: 100,  maxComments: 50,  maxVideos: 0   },
+        };
+
+        function applyMode(mode) {
+            var preset = modePresets[mode];
+            if (!preset) return;
+            document.getElementById('threshold').value = preset.threshold;
+            document.getElementById('maxComments').value = preset.maxComments;
+            document.getElementById('maxVideos').value = preset.maxVideos;
+        }
+
+        document.getElementById('modeSelect').addEventListener('change', function() {
+            applyMode(this.value);
+        });
 
         document.getElementById('startBtn').addEventListener('click', startScrolling);
         document.getElementById('stopBtn').addEventListener('click', stopScrolling);

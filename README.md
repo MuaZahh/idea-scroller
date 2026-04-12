@@ -58,19 +58,42 @@ open `http://localhost:8000` in your browser. hit start. let it scroll for a bit
 
 first time it'll ask you to log into tiktok in the browser window. after that it remembers you.
 
-### settings
+### modes
+
+pick a mode in the UI dropdown:
+
+| mode | min comments | per video | max videos | time |
+|------|-------------|-----------|------------|------|
+| **Quick** | 500+ | 20 | 15 | ~2 min |
+| **Balanced** | 300+ | 50 | 30 | ~5 min |
+| **Thorough** | 100+ | 50 | unlimited | ~15+ min |
+
+**quick** is for a fast scan — only grabs the most viral videos. **balanced** is the default, good mix of speed and coverage. **thorough** scrolls until you stop it, catches everything.
+
+you can also tweak each setting manually after picking a mode.
+
+### heads up
+
+the analysis is very critical. it filters out ideas that:
+- a normal person would already think to use ChatGPT for
+- already have a well-known app
+- don't have enough people talking about them (300+ comments minimum)
+
+**this means sometimes it might return nothing**, even after a long session. that's by design — no result is better than a bad result. if you're getting empty results, try **thorough** mode and let it scroll longer. more data = better chance of finding something real.
+
+### settings (advanced)
 
 all configurable in the UI or `.env`:
 
 | setting | default | what it does |
 |---------|---------|-------------|
 | `COMMENT_THRESHOLD` | 300 | minimum comments on a video to scrape it |
-| `MAX_COMMENTS_PER_VIDEO` | 30 | how many comments to grab per qualifying video |
+| `MAX_COMMENTS_PER_VIDEO` | 50 | how many comments to grab per qualifying video |
 | `MAX_VIDEOS` | 0 | auto-stop after this many scraped videos (0 = unlimited) |
 
 ## what you get
 
-the top 3 app ideas ranked by how real the opportunity is. each one includes:
+the single best app idea the AI could find (or up to 3 if multiple strong ones exist). each one includes:
 
 - the pain point theme
 - why it's worth building
