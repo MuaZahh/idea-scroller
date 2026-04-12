@@ -271,42 +271,6 @@ class Scraper:
         except Exception:
             return {}
 
-    async def _click_comment_button_in_article(self, page: Page, article_id: str) -> bool:
-        """Click the comment button INSIDE the specific article element.
-
-        This prevents clicking the wrong video's comment button.
-        """
-        try:
-            clicked = await page.evaluate("""(articleId) => {
-                let art = null;
-                if (articleId) {
-                    art = document.getElementById(articleId);
-                }
-                if (!art) {
-                    // Fallback: find visible article
-                    const articles = document.querySelectorAll(
-                        'article[data-e2e="recommend-list-item-container"]'
-                    );
-                    for (const a of articles) {
-                        const rect = a.getBoundingClientRect();
-                        if (rect.top >= -200 && rect.top < window.innerHeight / 2) {
-                            art = a;
-                            break;
-                        }
-                    }
-                }
-                if (!art) return false;
-                const icon = art.querySelector('span[data-e2e="comment-icon"]');
-                if (!icon) return false;
-                const btn = icon.closest('button') || icon.parentElement;
-                if (!btn) return false;
-                btn.click();
-                return true;
-            }""", article_id)
-            return clicked
-        except Exception:
-            return False
-
     # ------------------------------------------------------------------
     # Video ID resolution
     # ------------------------------------------------------------------
@@ -405,14 +369,27 @@ class Scraper:
                 pass
             await asyncio.sleep(3)
 
-            # Extract initial video items from the page's SSR data
-            # The first batch of videos is rendered server-side and won't
-            # appear in XHR intercepts, so we parse them from embedded scripts
+            # Extract initial video items from SSR data
             await self._extract_initial_items(page)
+
+            # Open comment panel ONCE — it stays open and auto-updates
+            # as we scroll through videos
+            self._log("Opening comment panel...")
+            try:
+                await page.evaluate("""() => {
+                    const icon = document.querySelector('span[data-e2e="comment-icon"]');
+                    if (icon) {
+                        const btn = icon.closest('button') || icon.parentElement;
+                        if (btn) btn.click();
+                    }
+                }""")
+                await asyncio.sleep(2)
+                self._log("Comment panel opened — it will stay open during scrolling")
+            except Exception:
+                self._log("Could not open comment panel — comments will be collected via XHR only")
 
             self._log("Starting scroll loop...")
             last_article_id = ""
-            panel_is_open = False
 
             while not self._stop_event.is_set():
                 # 1. READ the video that is currently on screen
@@ -458,7 +435,7 @@ class Scraper:
                     await asyncio.sleep(1.5)
                     continue
 
-                # 4. SCRAPE this video
+                # 4. SCRAPE — panel is already open, just collect XHR comments
                 video = Video(
                     id=video_id,
                     session_id=session_id,
@@ -470,12 +447,8 @@ class Scraper:
                 self._videos.append(video)
                 self._videos_scraped += 1
 
-                self._log(
-                    f">>> Scraping @{author} ({comment_count} comments)..."
-                )
-                panel_is_open = await self._scrape_comments(
-                    page, video_id, article_id, panel_is_open
-                )
+                self._log(f">>> Collecting comments for @{author}...")
+                await self._collect_comments(page, video_id)
                 self._update_stats()
 
                 # 5. Scroll to next video (panel stays open)
@@ -490,55 +463,22 @@ class Scraper:
             browser.close()
 
     # ------------------------------------------------------------------
-    # Comment scraping — scoped to the correct article
+    # Comment collection — panel is already open, just wait for XHR
     # ------------------------------------------------------------------
 
-    async def _scrape_comments(
-        self, page: Page, video_id: str, article_id: str,
-        panel_is_open: bool,
-        max_comments: int = 30,
-    ) -> bool:
-        """Scrape comments from the current video. Returns True if panel is open after."""
+    async def _collect_comments(
+        self, page: Page, video_id: str, max_comments: int = 30,
+    ) -> None:
+        """Collect comments from XHR intercepts. Panel is already open."""
         self._intercepted_comments.clear()
 
-        if not panel_is_open:
-            # First time — open the comment panel
-            opened = await self._click_comment_button_in_article(page, article_id)
-            if not opened:
-                self._log("Failed to open comment panel")
-                return False
-            await asyncio.sleep(2)
-        else:
-            # Panel is already open from previous video — TikTok auto-loads
-            # new comments when you scroll to a new video with panel open.
-            # Just wait for the new comments to arrive via XHR.
-            await asyncio.sleep(2)
-
-        # Wait for comments to load, scroll panel if needed
+        # Wait for the comment XHR to fire (TikTok loads comments
+        # automatically when the panel is open and a new video is shown)
         stall_count = 0
-        max_stalls = 2
+        max_stalls = 3
 
         while stall_count < max_stalls and len(self._intercepted_comments) < max_comments:
             prev_count = len(self._intercepted_comments)
-
-            try:
-                await page.evaluate("""() => {
-                    const selectors = [
-                        'div[class*="DivCommentListContainer"]',
-                        'div[class*="DivCommentMain"]',
-                        'div[class*="CommentList"]',
-                    ];
-                    for (const sel of selectors) {
-                        const el = document.querySelector(sel);
-                        if (el && el.scrollHeight > el.clientHeight) {
-                            el.scrollTop = el.scrollHeight;
-                            return;
-                        }
-                    }
-                }""")
-            except Exception:
-                pass
-
             await asyncio.sleep(1)
 
             if len(self._intercepted_comments) == prev_count:
@@ -564,6 +504,3 @@ class Scraper:
 
         collected = min(len(self._intercepted_comments), max_comments)
         self._log(f"Collected {collected} comments")
-
-        # Keep the panel open — it will auto-update for the next video
-        return True
