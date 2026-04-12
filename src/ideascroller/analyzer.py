@@ -2,6 +2,8 @@
 
 import json
 import logging
+import traceback
+from typing import Optional
 
 from anthropic import AsyncAnthropic
 
@@ -66,21 +68,63 @@ class Analyzer:
     def __init__(self, api_key: str) -> None:
         self._client = AsyncAnthropic(api_key=api_key)
 
-    async def analyze(self, session_id: str, videos: list[Video], comments: list[Comment]) -> AnalysisResult:
+    async def analyze(
+        self,
+        session_id: str,
+        videos: list[Video],
+        comments: list[Comment],
+    ) -> AnalysisResult:
         if not comments:
-            return AnalysisResult(session_id=session_id, clusters=[], raw_response="No comments to analyze")
+            return AnalysisResult(
+                session_id=session_id, clusters=[], raw_response="No comments to analyze"
+            )
 
         prompt = build_analysis_prompt(videos, comments)
-        logger.info("Sending %d comments to Claude for analysis", len(comments))
-
-        response = await self._client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
+        logger.info(
+            "Sending %d comments from %d videos to Claude for analysis",
+            len(comments),
+            len(videos),
         )
+        logger.info("Prompt length: %d chars", len(prompt))
 
-        raw_text = response.content[0].text
-        parsed = json.loads(raw_text)
-        clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
-        return AnalysisResult(session_id=session_id, clusters=clusters, raw_response=raw_text)
+        # Retry once on failure
+        last_error: Optional[Exception] = None
+        for attempt in range(2):
+            try:
+                response = await self._client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=4096,
+                    system=_SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": prompt}],
+                    timeout=60.0,
+                )
+
+                raw_text = response.content[0].text
+                logger.info("Claude response: %d chars", len(raw_text))
+
+                parsed = json.loads(raw_text)
+                clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
+                return AnalysisResult(
+                    session_id=session_id,
+                    clusters=clusters,
+                    raw_response=raw_text,
+                )
+
+            except json.JSONDecodeError as e:
+                logger.error("Failed to parse Claude response as JSON: %s", e)
+                logger.error("Raw response: %s", raw_text[:500] if raw_text else "empty")
+                raise
+            except Exception as e:
+                last_error = e
+                logger.error(
+                    "Claude API error (attempt %d/2): %s\n%s",
+                    attempt + 1,
+                    e,
+                    traceback.format_exc(),
+                )
+                if attempt == 0:
+                    logger.info("Retrying in 3 seconds...")
+                    import asyncio
+                    await asyncio.sleep(3)
+
+        raise last_error  # type: ignore[misc]

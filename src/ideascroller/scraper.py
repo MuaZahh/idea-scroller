@@ -343,7 +343,8 @@ class Scraper:
     # ------------------------------------------------------------------
 
     async def _scrape_comments(
-        self, page: Page, video_id: str, article_id: str
+        self, page: Page, video_id: str, article_id: str,
+        max_comments: int = 30,
     ) -> None:
         self._intercepted_comments.clear()
 
@@ -355,19 +356,13 @@ class Scraper:
 
         await asyncio.sleep(2)
 
-        # Scroll the comment panel to load more comments via XHR
-        prev_count = 0
+        # Wait for first batch of comments (the initial XHR fires on panel open)
+        # Then scroll only if we need more
         stall_count = 0
-        max_stalls = 3
+        max_stalls = 2
 
-        while stall_count < max_stalls:
-            current_count = len(self._intercepted_comments)
-            if current_count > prev_count:
-                self._log(f"  ...{current_count} comments loaded")
-                prev_count = current_count
-                stall_count = 0
-            else:
-                stall_count += 1
+        while stall_count < max_stalls and len(self._intercepted_comments) < max_comments:
+            prev_count = len(self._intercepted_comments)
 
             try:
                 await page.evaluate("""() => {
@@ -389,8 +384,13 @@ class Scraper:
 
             await asyncio.sleep(1)
 
-        # Store collected comments
-        for raw in self._intercepted_comments:
+            if len(self._intercepted_comments) == prev_count:
+                stall_count += 1
+            else:
+                stall_count = 0
+
+        # Store collected comments (capped at max_comments)
+        for raw in self._intercepted_comments[:max_comments]:
             try:
                 self._comments.append(
                     Comment(
@@ -405,7 +405,8 @@ class Scraper:
             except Exception as e:
                 logger.debug("Failed to parse comment: %s", e)
 
-        self._log(f"Collected {len(self._intercepted_comments)} comments")
+        collected = min(len(self._intercepted_comments), max_comments)
+        self._log(f"Collected {collected} comments")
 
         # Close comment panel
         try:
