@@ -104,7 +104,16 @@ class Analyzer:
                 raw_text = response.content[0].text
                 logger.info("Claude response: %d chars", len(raw_text))
 
-                parsed = json.loads(raw_text)
+                # Strip markdown code fences if Claude wrapped the JSON
+                json_text = raw_text.strip()
+                if json_text.startswith("```"):
+                    # Remove opening fence (```json or ```)
+                    json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
+                if json_text.endswith("```"):
+                    json_text = json_text[:-3]
+                json_text = json_text.strip()
+
+                parsed = json.loads(json_text)
                 clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
                 return AnalysisResult(
                     session_id=session_id,
