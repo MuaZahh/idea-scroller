@@ -11,50 +11,52 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are an expert product researcher analyzing TikTok comments to discover app and SaaS opportunities.
 
-You will receive comments from TikTok videos grouped by video. Your job is to:
+You will receive comments from TikTok videos grouped by video. Your job is to find the TOP 3 BEST app/SaaS ideas hidden in these comments.
 
-1. CLUSTER comments by recurring themes, frustrations, and pain points
-2. RANK clusters by frequency (how many comments mention it) and intensity (how strongly people feel)
-3. RATE each cluster's potential as an app/product idea: HIGH, MEDIUM, or LOW
-4. SUGGEST a concrete app concept for each cluster
+Look for:
+- Pain points many people share (frequency matters)
+- Frustrations people feel strongly about (intensity matters)
+- Problems that could realistically be solved with software
+- Ideas where people are literally asking for a solution
 
-Respond with ONLY valid JSON matching this schema:
+Ignore off-topic comments, spam, memes, and purely positive reactions.
+
+Return EXACTLY 3 ideas (or fewer if the data doesn't support 3). Rank them #1, #2, #3 by how strong the opportunity is.
+
+Respond with ONLY valid JSON:
 {
   "clusters": [
     {
       "theme": "Short theme title",
-      "summary": "2-3 sentence explanation of the pain point",
-      "comment_count": <approximate number of comments in this cluster>,
-      "video_count": <number of videos where this theme appeared>,
-      "potential": "HIGH" | "MEDIUM" | "LOW",
-      "app_idea": "One-sentence app concept",
-      "sample_comments": ["3-5 representative comments from the data"]
+      "summary": "2-3 sentence explanation of the pain point and why it's a real opportunity",
+      "comment_count": <approximate number of comments mentioning this>,
+      "video_count": <number of videos where this came up>,
+      "potential": "HIGH",
+      "app_idea": "One concrete app concept that solves this",
+      "sample_comments": ["3-5 actual comments that show this pain point"]
     }
   ]
-}
-
-Focus on pain points that could realistically be solved with software. Ignore off-topic comments, spam, and purely positive reactions. Rank HIGH potential clusters first."""
+}"""
 
 _MERGE_PROMPT = """You are merging multiple batches of pain point analysis from TikTok comments.
 
-Below are clusters identified from different batches. Merge them:
+Below are the top ideas from each batch. Pick the BEST 3 overall:
 - Combine clusters with the same or very similar themes
 - Sum up comment_count and video_count for merged clusters
-- Keep the best sample_comments from each
-- Re-rank by overall frequency and intensity
-- Keep potential ratings accurate based on merged totals
+- Keep the best sample_comments
+- Return EXACTLY 3 ideas ranked #1, #2, #3
 
-Respond with ONLY valid JSON matching the same schema:
+Respond with ONLY valid JSON:
 {
   "clusters": [
     {
       "theme": "Short theme title",
       "summary": "2-3 sentence explanation",
-      "comment_count": <total across merged clusters>,
-      "video_count": <total across merged clusters>,
-      "potential": "HIGH" | "MEDIUM" | "LOW",
-      "app_idea": "One-sentence app concept",
-      "sample_comments": ["3-5 best representative comments"]
+      "comment_count": <total>,
+      "video_count": <total>,
+      "potential": "HIGH",
+      "app_idea": "One concrete app concept",
+      "sample_comments": ["3-5 best comments"]
     }
   ]
 }"""
