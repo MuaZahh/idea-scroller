@@ -208,6 +208,73 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
     app = FastAPI(title="IdeaScroller", lifespan=lifespan)
     static_dir = Path(__file__).parent / "static"
 
+    async def _auto_analyze(session_id: str) -> None:
+        """Run analysis automatically after scraper finishes (e.g. max_videos reached)."""
+        logger.info("Auto-analyzing session %s...", session_id)
+        await _state.manager.broadcast({
+            "type": "log",
+            "timestamp": datetime.datetime.now().isoformat(),
+            "message": "Analyzing comments...",
+        })
+
+        session = await _state.db.get_session(session_id)
+        if session:
+            updated = session.model_copy(update={
+                "status": SessionStatus.ANALYZING,
+                "stopped_at": datetime.datetime.now(),
+            })
+            await _state.db.update_session(updated)
+
+        try:
+            api_keys = _get_api_keys()
+            videos = await _state.db.get_videos(session_id)
+            comments = await _state.db.get_session_comments(session_id)
+
+            from ideascroller.analyzer import analyze_comments
+
+            async def broadcast_log(msg: str) -> None:
+                logger.info(msg)
+                await _state.manager.broadcast({
+                    "type": "log",
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "message": msg,
+                })
+
+            result = await analyze_comments(
+                api_keys=api_keys,
+                session_id=session_id,
+                videos=videos,
+                comments=comments,
+                on_log=broadcast_log,
+            )
+            await _state.db.save_analysis(result)
+
+            session = await _state.db.get_session(session_id)
+            if session:
+                updated = session.model_copy(update={"status": SessionStatus.COMPLETE})
+                await _state.db.update_session(updated)
+
+            await _state.manager.broadcast({
+                "type": "analysis",
+                "clusters": [c.model_dump() for c in result.clusters],
+            })
+            await _state.manager.broadcast({
+                "type": "log",
+                "timestamp": datetime.datetime.now().isoformat(),
+                "message": "Analysis complete!",
+            })
+        except Exception as e:
+            logger.error("Auto-analysis failed: %s", e)
+            await _state.manager.broadcast({
+                "type": "log",
+                "timestamp": datetime.datetime.now().isoformat(),
+                "message": f"Analysis failed: {e}",
+            })
+
+        _state.current_session_id = None
+        _state.scraper = None
+        _state.scrape_task = None
+
     @app.get("/", response_class=HTMLResponse)
     async def index():
         html_path = static_dir / "index.html"
@@ -280,6 +347,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
             except Exception as e:
                 logger.error("Scraper error: %s", e)
             finally:
+                # Save collected data
                 for video in scraper.videos:
                     await _state.db.save_video(video)
                 if scraper.comments:
@@ -290,6 +358,11 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                     "total_comments": len(scraper.comments),
                 })
                 await _state.db.update_session(updated_session)
+
+                # Auto-analyze if scraper finished on its own (max_videos reached)
+                # and nobody already triggered /stop
+                if scraper.comments and _state.current_session_id == session.id:
+                    await _auto_analyze(session.id)
 
         _state.scrape_task = asyncio.create_task(run_and_save())
         return {"session_id": session.id}

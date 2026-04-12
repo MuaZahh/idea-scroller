@@ -88,12 +88,13 @@ async def test_full_flow_with_mock_scraper_and_analyzer(integration_app, integra
         assert start_resp.status_code == 200
         session_id = start_resp.json()["session_id"]
 
-        await asyncio.sleep(0.5)
+        # Wait for scraper to finish and auto-analyze to complete
+        for _ in range(20):
+            await asyncio.sleep(0.5)
+            results_resp = await client.get(f"/results/{session_id}")
+            if results_resp.status_code == 200:
+                break
 
-        stop_resp = await client.post("/stop")
-        assert stop_resp.status_code == 200
-
-        results_resp = await client.get(f"/results/{session_id}")
         assert results_resp.status_code == 200
         clusters = results_resp.json()["clusters"]
         assert len(clusters) == 1

@@ -206,7 +206,23 @@ async def analyze_comments(
             session_id=session_id, clusters=[], raw_response="No comments to analyze"
         )
 
-    log = on_log or (lambda msg: logger.info(msg))
+    import asyncio as _asyncio
+    import inspect as _inspect
+
+    _raw_log = on_log or (lambda msg: logger.info(msg))
+
+    def log(msg: str) -> None:
+        result = _raw_log(msg)
+        # If the callback is async, schedule it
+        if _inspect.isawaitable(result):
+            try:
+                loop = _asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(result)
+                else:
+                    loop.run_until_complete(result)
+            except RuntimeError:
+                pass
     provider_name, api_key, call_fn = detect_provider(api_keys)
     log(f"Using {provider_name} for analysis")
 
