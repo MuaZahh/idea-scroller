@@ -177,36 +177,58 @@ class Scraper:
             logger.debug("Failed to extract initial items: %s", e)
 
     @staticmethod
-    def _find_chrome_binary() -> str:
-        """Find the real Chrome binary on macOS."""
+    def _find_browser_binary() -> tuple[str, str]:
+        """Find the default Chromium-based browser on macOS.
+
+        Returns (binary_path, user_data_dir).
+        Tries Comet (Perplexity), then Chrome, then Chromium.
+        """
+        home = str(Path.home())
         candidates = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            (
+                "/Applications/Comet.app/Contents/MacOS/Comet",
+                f"{home}/Library/Application Support/Comet",
+                "Comet",
+            ),
+            (
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                f"{home}/Library/Application Support/Google/Chrome",
+                "Google Chrome",
+            ),
+            (
+                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                f"{home}/Library/Application Support/Chromium",
+                "Chromium",
+            ),
         ]
-        for path in candidates:
-            if Path(path).exists():
-                return path
-        raise FileNotFoundError("Could not find Google Chrome. Install it from google.com/chrome")
+        for binary, data_dir, name in candidates:
+            if Path(binary).exists():
+                return binary, data_dir
+        raise FileNotFoundError(
+            "Could not find a Chromium-based browser (Comet, Chrome, or Chromium)"
+        )
 
-    def _launch_chrome_with_debugging(self) -> subprocess.Popen:
-        """Launch the user's real Chrome with remote debugging enabled."""
-        chrome_bin = self._find_chrome_binary()
-        chrome_data_dir = self._chrome_dir
+    def _launch_browser_with_debugging(self) -> tuple[subprocess.Popen, str]:
+        """Launch the user's default browser with remote debugging.
 
-        # Launch Chrome with remote debugging on port 9222
+        Returns (process, browser_name).
+        """
+        binary, data_dir = self._find_browser_binary()
+        browser_name = Path(binary).stem
+
         proc = subprocess.Popen(
             [
-                chrome_bin,
-                f"--user-data-dir={chrome_data_dir}",
+                binary,
+                f"--user-data-dir={data_dir}",
                 "--remote-debugging-port=9222",
                 "--no-first-run",
                 "--no-default-browser-check",
+                "https://www.tiktok.com/foryou",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        return proc
+        return proc, browser_name
 
     # ------------------------------------------------------------------
     # DOM helpers — all scoped to the VISIBLE article element
@@ -331,19 +353,21 @@ class Scraper:
     # ------------------------------------------------------------------
 
     async def run(self, session_id: str) -> None:
-        self._log("Closing any existing Chrome instances...")
+        self._log("Closing any existing browser instances...")
 
-        # Kill existing Chrome so we can relaunch with debugging
+        # Kill existing browser so we can relaunch with debugging
+        subprocess.run(["pkill", "-f", "Comet"], capture_output=True)
         subprocess.run(["pkill", "-f", "Google Chrome"], capture_output=True)
         await asyncio.sleep(2)
 
-        self._log("Launching Chrome with your account...")
-        chrome_proc = self._launch_chrome_with_debugging()
+        self._log("Launching browser with your account...")
+        browser_proc, browser_name = self._launch_browser_with_debugging()
+        self._log(f"Using {browser_name}")
 
-        # Wait for Chrome debugging port to be ready
-        for i in range(15):
+        # Wait for debugging port to be ready
+        import httpx
+        for _ in range(15):
             try:
-                import httpx
                 async with httpx.AsyncClient() as client:
                     resp = await client.get("http://127.0.0.1:9222/json/version")
                     if resp.status_code == 200:
@@ -352,20 +376,33 @@ class Scraper:
                 pass
             await asyncio.sleep(1)
         else:
-            self._log("Chrome failed to start with debugging port")
-            chrome_proc.terminate()
+            self._log("Browser failed to start with debugging port")
+            browser_proc.terminate()
             return
 
-        self._log("Connecting to Chrome...")
+        self._log("Connecting to browser...")
 
         async with async_playwright() as pw:
             browser = await pw.chromium.connect_over_cdp("http://127.0.0.1:9222")
             context = browser.contexts[0] if browser.contexts else await browser.new_context()
-            page = await context.new_page()
+
+            # Find the TikTok tab that was opened automatically, or open a new one
+            page = None
+            for p in context.pages:
+                if "tiktok.com" in p.url:
+                    page = p
+                    break
+            if not page:
+                page = await context.new_page()
+                await page.goto("https://www.tiktok.com/foryou")
+
             page.on("response", self._handle_response)
 
-            self._log("Navigating to TikTok FYP...")
-            await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
+            self._log("Waiting for TikTok FYP to load...")
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await asyncio.sleep(3)
 
             # Extract initial video items from the page's SSR data
@@ -445,8 +482,11 @@ class Scraper:
                 await page.keyboard.press("ArrowDown")
                 await asyncio.sleep(1.5)
 
-            self._log("Scroll loop stopped. Closing tab...")
-            await page.close()
+            self._log("Scroll loop stopped.")
+            try:
+                await page.close()
+            except Exception:
+                pass
             browser.close()
 
     # ------------------------------------------------------------------
