@@ -21,12 +21,18 @@
         }
         .header h1 { font-size: 20px; font-weight: 700; color: #fff; }
         .header .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
-        .threshold-display { font-size: 12px; color: #888; }
-        .threshold-display input {
+        .settings { font-size: 12px; color: #888; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+        .settings label { display: flex; align-items: center; gap: 4px; }
+        .settings input {
             background: #2a2a3e; color: #fff; border: 1px solid #3a3a4e;
-            padding: 2px 8px; border-radius: 4px; width: 60px; text-align: center;
+            padding: 2px 8px; border-radius: 4px; width: 55px; text-align: center;
             font-size: 12px;
         }
+        .btn-export {
+            background: #2a2a3e; color: #888; border: 1px solid #3a3a4e;
+            padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer;
+        }
+        .btn-export:hover { color: #fff; border-color: #555; }
         .controls {
             padding: 16px 24px;
             display: flex;
@@ -103,10 +109,10 @@
             <h1>IdeaScroller</h1>
             <div class="subtitle">TikTok pain point discovery</div>
         </div>
-        <div class="threshold-display">
-            Threshold:
-            <input type="number" id="threshold" value="300" min="1">
-            comments
+        <div class="settings">
+            <label>Min comments: <input type="number" id="threshold" value="300" min="1"></label>
+            <label>Per video: <input type="number" id="maxComments" value="30" min="1"></label>
+            <label>Max videos: <input type="number" id="maxVideos" value="0" min="0" title="0 = unlimited"></label>
         </div>
     </div>
 
@@ -128,8 +134,19 @@
     <div class="analyzing-spinner" id="spinner">Analyzing comments with Claude...</div>
 
     <div class="results-section" id="resultsSection">
-        <div class="label">Analysis Results</div>
+        <div class="label" style="display:flex;justify-content:space-between;align-items:center;">
+            Analysis Results
+            <div style="display:flex;gap:8px;">
+                <button class="btn-export" id="exportMd">Export .md</button>
+                <button class="btn-export" id="exportJson">Export .json</button>
+            </div>
+        </div>
         <div id="clustersContainer"></div>
+    </div>
+
+    <div class="results-section" id="historySection" style="display:block;margin-top:16px;">
+        <div class="label">Past Sessions</div>
+        <div id="historyContainer" style="color:#666;font-size:13px;">Loading...</div>
     </div>
 
     <script>
@@ -180,11 +197,15 @@
         }
 
         function startScrolling() {
-            var threshold = document.getElementById('threshold').value;
+            var config = {
+                comment_threshold: parseInt(document.getElementById('threshold').value),
+                max_comments_per_video: parseInt(document.getElementById('maxComments').value),
+                max_videos: parseInt(document.getElementById('maxVideos').value),
+            };
             fetch('/config', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ comment_threshold: parseInt(threshold) }),
+                body: JSON.stringify(config),
             }).then(function() {
                 return fetch('/start', { method: 'POST' });
             }).then(function(response) {
@@ -273,15 +294,103 @@
             }
         }
 
+        var lastClusters = null;
+
+        function exportMarkdown() {
+            if (!lastClusters || lastClusters.length === 0) return;
+            var md = '# IdeaScroller Results\n\n';
+            for (var i = 0; i < lastClusters.length; i++) {
+                var c = lastClusters[i];
+                md += '## ' + (i + 1) + '. ' + c.theme + '\n\n';
+                md += c.summary + '\n\n';
+                md += '**App idea:** ' + c.app_idea + '\n\n';
+                md += '*' + c.comment_count + ' comments across ' + c.video_count + ' videos*\n\n';
+                if (c.sample_comments && c.sample_comments.length > 0) {
+                    md += 'Sample comments:\n';
+                    for (var j = 0; j < c.sample_comments.length; j++) {
+                        md += '> ' + c.sample_comments[j] + '\n\n';
+                    }
+                }
+                md += '---\n\n';
+            }
+            var blob = new Blob([md], { type: 'text/markdown' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'ideascroller-results.md';
+            a.click();
+        }
+
+        function exportJson() {
+            if (!lastClusters || lastClusters.length === 0) return;
+            var blob = new Blob([JSON.stringify({ clusters: lastClusters }, null, 2)], { type: 'application/json' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'ideascroller-results.json';
+            a.click();
+        }
+
+        function loadHistory() {
+            fetch('/sessions').then(function(r) { return r.json(); }).then(function(data) {
+                var container = document.getElementById('historyContainer');
+                while (container.firstChild) container.removeChild(container.firstChild);
+                if (!data.sessions || data.sessions.length === 0) {
+                    container.textContent = 'No past sessions yet.';
+                    return;
+                }
+                for (var i = 0; i < data.sessions.length; i++) {
+                    var s = data.sessions[i];
+                    var row = document.createElement('div');
+                    row.style.cssText = 'padding:8px 0;border-bottom:1px solid #2a2a3e;display:flex;justify-content:space-between;align-items:center;';
+
+                    var info = document.createElement('span');
+                    var date = new Date(s.started_at).toLocaleString();
+                    info.textContent = date + ' \u2014 ' + s.videos_scraped + ' videos, ' + s.total_comments + ' comments';
+
+                    var btn = document.createElement('button');
+                    btn.className = 'btn-export';
+                    btn.textContent = 'View results';
+                    btn.setAttribute('data-session-id', s.id);
+                    btn.addEventListener('click', function() {
+                        var sid = this.getAttribute('data-session-id');
+                        fetch('/results/' + sid).then(function(r) { return r.json(); }).then(function(d) {
+                            if (d.clusters) {
+                                lastClusters = d.clusters;
+                                renderClusters(d.clusters);
+                            }
+                        });
+                    });
+
+                    row.appendChild(info);
+                    row.appendChild(btn);
+                    container.appendChild(row);
+                }
+            }).catch(function() {
+                document.getElementById('historyContainer').textContent = 'Failed to load history.';
+            });
+        }
+
+        // Override renderClusters to also store for export
+        var _origRenderClusters = renderClusters;
+        renderClusters = function(clusters) {
+            lastClusters = clusters;
+            _origRenderClusters(clusters);
+        };
+
         document.getElementById('startBtn').addEventListener('click', startScrolling);
         document.getElementById('stopBtn').addEventListener('click', stopScrolling);
+        document.getElementById('exportMd').addEventListener('click', exportMarkdown);
+        document.getElementById('exportJson').addEventListener('click', exportJson);
 
         addLogEntry(new Date().toISOString(), 'Ready \u2014 press Start to begin scrolling');
         connectWebSocket();
 
         fetch('/config').then(function(r) { return r.json(); }).then(function(data) {
             document.getElementById('threshold').value = data.comment_threshold;
+            document.getElementById('maxComments').value = data.max_comments_per_video;
+            document.getElementById('maxVideos').value = data.max_videos;
         });
+
+        loadHistory();
     </script>
 </body>
 </html>

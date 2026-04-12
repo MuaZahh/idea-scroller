@@ -69,6 +69,25 @@ class Database:
         rows = await cursor.fetchall()
         return [row["name"] for row in rows]
 
+    async def list_sessions(self) -> list[Session]:
+        cursor = await self._conn.execute(
+            "SELECT * FROM sessions ORDER BY started_at DESC LIMIT 20"
+        )
+        rows = await cursor.fetchall()
+        return [
+            Session(
+                id=row["id"],
+                started_at=datetime.datetime.fromisoformat(row["started_at"]),
+                stopped_at=datetime.datetime.fromisoformat(row["stopped_at"]) if row["stopped_at"] else None,
+                status=SessionStatus(row["status"]),
+                threshold=row["threshold"],
+                videos_scanned=row["videos_scanned"],
+                videos_scraped=row["videos_scraped"],
+                total_comments=row["total_comments"],
+            )
+            for row in rows
+        ]
+
     async def save_session(self, session: Session) -> None:
         await self._conn.execute(
             """INSERT INTO sessions (id, started_at, stopped_at, status, threshold,

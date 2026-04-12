@@ -35,11 +35,15 @@ class Scraper:
         self,
         chrome_user_data_dir: str,
         comment_threshold: int = 300,
+        max_comments_per_video: int = 30,
+        max_videos: int = 0,
         on_log: Optional[Callable[[str], None]] = None,
         on_stats_update: Optional[Callable[[int, int, int], None]] = None,
     ) -> None:
         self._chrome_dir = chrome_user_data_dir
         self._threshold = comment_threshold
+        self._max_comments = max_comments_per_video
+        self._max_videos = max_videos  # 0 = unlimited
         self._on_log = on_log or (lambda msg: None)
         self._on_stats_update = on_stats_update or (lambda a, b, c: None)
         self._stop_event = asyncio.Event()
@@ -386,6 +390,11 @@ class Scraper:
                 await self._collect_comments(page, video_id)
                 self._update_stats()
 
+                # Auto-stop if we've hit the max videos limit
+                if self._max_videos > 0 and self._videos_scraped >= self._max_videos:
+                    self._log(f"Reached max videos limit ({self._max_videos}). Stopping.")
+                    break
+
                 # 5. Scroll to next video (panel stays open)
                 await page.keyboard.press("ArrowDown")
                 await asyncio.sleep(1.5)
@@ -401,10 +410,11 @@ class Scraper:
     # ------------------------------------------------------------------
 
     async def _collect_comments(
-        self, page: Page, video_id: str, max_comments: int = 30,
+        self, page: Page, video_id: str,
     ) -> None:
         """Collect comments for a video. Comments may already be in the cache
         (TikTok pre-loads them) or may arrive shortly via XHR."""
+        max_comments = self._max_comments
 
         # Wait briefly for comments to arrive if not already cached
         for _ in range(5):

@@ -60,22 +60,24 @@ first time it'll ask you to log into tiktok in the browser window. after that it
 
 ### settings
 
-the comment threshold is configurable in the UI (default 300). you can also set these in `.env`:
+all configurable in the UI or `.env`:
 
-```
-COMMENT_THRESHOLD=300
-HOST=127.0.0.1
-PORT=8000
-```
+| setting | default | what it does |
+|---------|---------|-------------|
+| `COMMENT_THRESHOLD` | 300 | minimum comments on a video to scrape it |
+| `MAX_COMMENTS_PER_VIDEO` | 30 | how many comments to grab per qualifying video |
+| `MAX_VIDEOS` | 0 | auto-stop after this many scraped videos (0 = unlimited) |
 
 ## what you get
 
-after analysis, you get the top 3 app ideas ranked by how real the opportunity is. each one includes:
+the top 3 app ideas ranked by how real the opportunity is. each one includes:
 
 - the pain point theme
 - why it's worth building
 - a concrete app concept
 - actual comments from real people experiencing the problem
+
+you can **export results** as markdown or JSON, and **view past sessions** in the history panel.
 
 ## how it actually works (for the nerds)
 

@@ -46,7 +46,9 @@ class ConnectionManager:
 
 
 class ConfigUpdate(BaseModel):
-    comment_threshold: int
+    comment_threshold: Optional[int] = None
+    max_comments_per_video: Optional[int] = None
+    max_videos: Optional[int] = None
 
 
 class AppState:
@@ -213,12 +215,25 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
 
     @app.get("/config")
     async def get_config():
-        return {"comment_threshold": _state.settings.comment_threshold}
+        return {
+            "comment_threshold": _state.settings.comment_threshold,
+            "max_comments_per_video": _state.settings.max_comments_per_video,
+            "max_videos": _state.settings.max_videos,
+        }
 
     @app.put("/config")
     async def put_config(update: ConfigUpdate):
-        _state.settings.comment_threshold = update.comment_threshold
-        return {"comment_threshold": _state.settings.comment_threshold}
+        if update.comment_threshold is not None:
+            _state.settings.comment_threshold = update.comment_threshold
+        if update.max_comments_per_video is not None:
+            _state.settings.max_comments_per_video = update.max_comments_per_video
+        if update.max_videos is not None:
+            _state.settings.max_videos = update.max_videos
+        return {
+            "comment_threshold": _state.settings.comment_threshold,
+            "max_comments_per_video": _state.settings.max_comments_per_video,
+            "max_videos": _state.settings.max_videos,
+        }
 
     @app.post("/start")
     async def start():
@@ -252,6 +267,8 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
         scraper = Scraper(
             chrome_user_data_dir=chrome_dir,
             comment_threshold=_state.settings.comment_threshold,
+            max_comments_per_video=_state.settings.max_comments_per_video,
+            max_videos=_state.settings.max_videos,
             on_log=sync_log,
             on_stats_update=sync_stats,
         )
@@ -367,6 +384,11 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
         if not result:
             return JSONResponse(status_code=404, content={"error": "No analysis found"})
         return {"clusters": [c.model_dump() for c in result.clusters]}
+
+    @app.get("/sessions")
+    async def list_sessions():
+        sessions = await _state.db.list_sessions()
+        return {"sessions": [s.model_dump() for s in sessions]}
 
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket):

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     chrome_user_data_dir: str = ""
     comment_threshold: int = 300
+    max_comments_per_video: int = 30
+    max_videos: int = 0  # 0 = unlimited
     host: str = "127.0.0.1"
     port: int = 8000
 
