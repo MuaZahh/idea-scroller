@@ -12,7 +12,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from ideascroller.analyzer import Analyzer
+from ideascroller.analyzer import analyze_comments
 from ideascroller.config import Settings, get_chrome_user_data_dir
 from ideascroller.db import Database
 from ideascroller.models import LogEvent, Session, SessionStatus
@@ -142,30 +142,13 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                         videos = await _state.db.get_videos(session_id)
                         comments = await _state.db.get_session_comments(session_id)
 
-                        from anthropic import AsyncAnthropic
-                        from ideascroller.analyzer import build_analysis_prompt, _SYSTEM_PROMPT
-                        import json as _json
-
-                        client = AsyncAnthropic(api_key=api_key)
-                        logger.info("Calling Claude with key: %s...%s", api_key[:10], api_key[-5:])
-                        prompt = build_analysis_prompt(videos, comments)
-                        response = await client.messages.create(
-                            model="claude-sonnet-4-6",
-                            max_tokens=4096,
-                            system=_SYSTEM_PROMPT,
-                            messages=[{"role": "user", "content": prompt}],
+                        from ideascroller.analyzer import analyze_comments
+                        result = await analyze_comments(
+                            api_key=api_key,
+                            session_id=session_id,
+                            videos=videos,
+                            comments=comments,
                         )
-                        raw_text = response.content[0].text
-                        json_text = raw_text.strip()
-                        if json_text.startswith("```"):
-                            json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
-                        if json_text.endswith("```"):
-                            json_text = json_text[:-3]
-                        parsed = _json.loads(json_text.strip())
-
-                        from ideascroller.models import AnalysisCluster, AnalysisResult
-                        clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
-                        result = AnalysisResult(session_id=session_id, clusters=clusters, raw_response=raw_text)
                         await _state.db.save_analysis(result)
 
                         logger.info("Analysis complete! %d clusters found", len(result.clusters))
@@ -314,32 +297,23 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
             videos = await _state.db.get_videos(session_id)
             comments = await _state.db.get_session_comments(session_id)
 
-            # Call Claude directly — no wrapper class
-            from anthropic import AsyncAnthropic
-            client = AsyncAnthropic(api_key=api_key)
-            logger.info("Calling Claude with key: %s...%s", api_key[:10], api_key[-5:])
+            from ideascroller.analyzer import analyze_comments
 
-            from ideascroller.analyzer import build_analysis_prompt, _SYSTEM_PROMPT
-            prompt = build_analysis_prompt(videos, comments)
-            import json as _json
+            async def broadcast_log(msg: str) -> None:
+                logger.info(msg)
+                await _state.manager.broadcast({
+                    "type": "log",
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "message": msg,
+                })
 
-            response = await client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=4096,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
+            result = await analyze_comments(
+                api_key=api_key,
+                session_id=session_id,
+                videos=videos,
+                comments=comments,
+                on_log=broadcast_log,
             )
-            raw_text = response.content[0].text
-            json_text = raw_text.strip()
-            if json_text.startswith("```"):
-                json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
-            if json_text.endswith("```"):
-                json_text = json_text[:-3]
-            parsed = _json.loads(json_text.strip())
-
-            from ideascroller.models import AnalysisCluster, AnalysisResult
-            clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
-            result = AnalysisResult(session_id=session_id, clusters=clusters, raw_response=raw_text)
             await _state.db.save_analysis(result)
 
             session = await _state.db.get_session(session_id)
