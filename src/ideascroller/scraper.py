@@ -138,7 +138,7 @@ class Scraper:
                 if self._stop_event.is_set():
                     break
                 await page.keyboard.press("ArrowDown")
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
             self._log("Scroll loop stopped. Closing browser...")
             await context.close()
 
@@ -271,51 +271,77 @@ class Scraper:
         self._update_stats()
 
     async def _scrape_comments(self, page: Page, video_id: str) -> None:
+        """Open comment panel, scroll to load comments via XHR, collect them."""
         self._intercepted_comments.clear()
+
+        # Click the comment icon's parent button
+        # The comment icon is span[data-e2e="comment-icon"] inside an unlabeled BUTTON
         try:
-            comment_btn = page.locator('div[data-e2e="comment-button"]').first
-            await comment_btn.click(timeout=5000)
-            await asyncio.sleep(2)
+            comment_icon = page.locator('span[data-e2e="comment-icon"]').first
+            parent_btn = comment_icon.locator('..')
+            await parent_btn.click(timeout=3000)
+            await asyncio.sleep(1.5)
         except Exception as e:
             self._log(f"Failed to open comment panel: {e}")
             return
 
+        # Scroll the comment panel to load more comments
         prev_count = 0
         stall_count = 0
         max_stalls = 3
+
         while stall_count < max_stalls:
             current_count = len(self._intercepted_comments)
             if current_count > prev_count:
                 prev_count = current_count
                 stall_count = 0
+                self._log(f"  ...loaded {current_count} comments so far")
             else:
                 stall_count += 1
+
             try:
                 await page.evaluate("""() => {
-                    const panel = document.querySelector('div[class*="DivCommentListContainer"]')
-                        || document.querySelector('div[class*="DivCommentMain"]');
-                    if (panel) panel.scrollTop = panel.scrollHeight;
+                    // Find the comment panel scrollable container
+                    const selectors = [
+                        'div[class*="DivCommentListContainer"]',
+                        'div[class*="DivCommentMain"]',
+                        'div[class*="CommentList"]',
+                    ];
+                    for (const sel of selectors) {
+                        const panel = document.querySelector(sel);
+                        if (panel && panel.scrollHeight > panel.clientHeight) {
+                            panel.scrollTop = panel.scrollHeight;
+                            return true;
+                        }
+                    }
+                    return false;
                 }""")
             except Exception:
                 pass
-            await asyncio.sleep(1.5)
 
+            await asyncio.sleep(1)
+
+        # Convert intercepted comments to our model
         for raw_comment in self._intercepted_comments:
             try:
                 comment = Comment(
-                    id=raw_comment.get("cid", ""), video_id=video_id,
+                    id=raw_comment.get("cid", ""),
+                    video_id=video_id,
                     text=raw_comment.get("text", ""),
                     author=raw_comment.get("user", {}).get("unique_id", "unknown"),
                     likes=raw_comment.get("digg_count", 0),
-                    reply_count=raw_comment.get("reply_comment_total", 0))
+                    reply_count=raw_comment.get("reply_comment_total", 0),
+                )
                 self._comments.append(comment)
             except Exception as e:
                 logger.debug("Failed to parse comment: %s", e)
 
         self._log(f"Collected {len(self._intercepted_comments)} comments from video {video_id}")
+
+        # Close comment panel
         try:
             await page.keyboard.press("Escape")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
         except Exception:
             pass
 
