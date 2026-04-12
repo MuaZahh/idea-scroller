@@ -73,7 +73,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
         _state.scrape_task = None
         _state.manager = ConnectionManager()
         yield
-        # Graceful shutdown — stop scraper and save collected data
+        # Graceful shutdown — stop scraper, save data, run analysis
         logger.info("Shutting down — saving session data...")
         if _state.scraper:
             _state.scraper.stop()
@@ -82,30 +82,80 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                 await asyncio.wait_for(_state.scrape_task, timeout=10)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 pass
-        # Save any unsaved data from the scraper
+
         if _state.scraper and _state.current_session_id:
+            session_id = _state.current_session_id
             try:
+                # Save scraped data
                 for video in _state.scraper.videos:
                     await _state.db.save_video(video)
                 if _state.scraper.comments:
                     await _state.db.save_comments(_state.scraper.comments)
-                session = await _state.db.get_session(_state.current_session_id)
-                if session:
-                    updated = session.model_copy(update={
-                        "status": SessionStatus.ERROR,
-                        "stopped_at": datetime.datetime.now(),
-                        "videos_scanned": _state.scraper.videos_scanned,
-                        "videos_scraped": _state.scraper.videos_scraped,
-                        "total_comments": len(_state.scraper.comments),
-                    })
-                    await _state.db.update_session(updated)
+
                 logger.info(
-                    "Saved %d videos, %d comments before shutdown",
+                    "Saved %d videos, %d comments",
                     len(_state.scraper.videos),
                     len(_state.scraper.comments),
                 )
+
+                # Run Claude analysis if we have comments
+                if _state.scraper.comments and _state.settings.anthropic_api_key:
+                    logger.info("Running Claude analysis before shutdown...")
+                    session = await _state.db.get_session(session_id)
+                    if session:
+                        updated = session.model_copy(update={
+                            "status": SessionStatus.ANALYZING,
+                            "stopped_at": datetime.datetime.now(),
+                            "videos_scanned": _state.scraper.videos_scanned,
+                            "videos_scraped": _state.scraper.videos_scraped,
+                            "total_comments": len(_state.scraper.comments),
+                        })
+                        await _state.db.update_session(updated)
+
+                    try:
+                        analyzer = Analyzer(api_key=_state.settings.anthropic_api_key)
+                        videos = await _state.db.get_videos(session_id)
+                        comments = await _state.db.get_session_comments(session_id)
+                        result = await analyzer.analyze(session_id, videos, comments)
+                        await _state.db.save_analysis(result)
+
+                        logger.info("Analysis complete! %d clusters found", len(result.clusters))
+                        for cluster in result.clusters:
+                            logger.info(
+                                "  [%s] %s — %s",
+                                cluster.potential,
+                                cluster.theme,
+                                cluster.app_idea,
+                            )
+
+                        session = await _state.db.get_session(session_id)
+                        if session:
+                            updated = session.model_copy(update={"status": SessionStatus.COMPLETE})
+                            await _state.db.update_session(updated)
+
+                    except Exception as e:
+                        logger.error("Analysis failed: %s", e)
+                        session = await _state.db.get_session(session_id)
+                        if session:
+                            updated = session.model_copy(update={"status": SessionStatus.ERROR})
+                            await _state.db.update_session(updated)
+                else:
+                    if not _state.settings.anthropic_api_key:
+                        logger.warning("No ANTHROPIC_API_KEY set — skipping analysis")
+                    session = await _state.db.get_session(session_id)
+                    if session:
+                        updated = session.model_copy(update={
+                            "status": SessionStatus.COMPLETE,
+                            "stopped_at": datetime.datetime.now(),
+                            "videos_scanned": _state.scraper.videos_scanned,
+                            "videos_scraped": _state.scraper.videos_scraped,
+                            "total_comments": len(_state.scraper.comments),
+                        })
+                        await _state.db.update_session(updated)
+
             except Exception as e:
                 logger.error("Failed to save data on shutdown: %s", e)
+
         await _state.db.close()
 
     app = FastAPI(title="IdeaScroller", lifespan=lifespan)

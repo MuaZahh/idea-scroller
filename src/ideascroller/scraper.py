@@ -328,32 +328,40 @@ class Scraper:
     # ------------------------------------------------------------------
 
     async def run(self, session_id: str) -> None:
-        self._log("Closing any existing browser instances...")
-
-        # Kill existing browser so we can relaunch with debugging
-        subprocess.run(["pkill", "-f", "Comet"], capture_output=True)
-        subprocess.run(["pkill", "-f", "Google Chrome"], capture_output=True)
-        await asyncio.sleep(2)
-
-        self._log("Launching browser with your account...")
-        browser_proc, browser_name = self._launch_browser_with_debugging()
-        self._log(f"Using {browser_name}")
-
-        # Wait for debugging port to be ready
         import httpx
-        for _ in range(15):
-            try:
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get("http://127.0.0.1:9222/json/version")
-                    if resp.status_code == 200:
-                        break
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-        else:
-            self._log("Browser failed to start with debugging port")
-            browser_proc.terminate()
-            return
+
+        # First, try to connect to an already-running browser with debugging
+        already_running = False
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get("http://127.0.0.1:9222/json/version")
+                if resp.status_code == 200:
+                    already_running = True
+                    self._log("Found browser with debugging enabled — connecting...")
+        except Exception:
+            pass
+
+        if not already_running:
+            # Need to launch browser — but DON'T kill existing instances
+            # Just launch a new one with debugging
+            self._log("Launching browser with your account...")
+            browser_proc, browser_name = self._launch_browser_with_debugging()
+            self._log(f"Using {browser_name}")
+
+            # Wait for debugging port to be ready
+            for _ in range(15):
+                try:
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.get("http://127.0.0.1:9222/json/version")
+                        if resp.status_code == 200:
+                            break
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+            else:
+                self._log("Browser failed to start. Close your browser and try again.")
+                browser_proc.terminate()
+                return
 
         self._log("Connecting to browser...")
 
@@ -471,7 +479,10 @@ class Scraper:
                 await page.close()
             except Exception:
                 pass
-            browser.close()
+            try:
+                await browser.close()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Comment collection — panel is already open, just wait for XHR
