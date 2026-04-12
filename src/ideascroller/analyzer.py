@@ -19,21 +19,24 @@ Look for:
 - Problems that could realistically be solved with software
 - Ideas where people are literally asking for a solution
 
-HARD FILTER — reject ANY idea where:
-- A user could open ChatGPT/Claude right now and get 70%+ of the value by just prompting it (e.g. "help me explain my symptoms", "give me a meal plan", "explain this topic simply"). If the core value is "ask questions and get answers", it's a prompt, not an app.
-- A well-known app already does this (Shazam, Duolingo, Screen Time, MyFitnessPal, etc.)
-- The idea is basically "chatbot + [domain]" — wrapping an LLM in a UI is not a product
-- It's too vague or generic ("help people be more productive", "wellness app")
-- The main feature is generating/summarizing text — LLMs already do this for free
+HARD FILTER — reject ideas that:
+- Are something a normal person WOULD already think to ask ChatGPT (e.g. "explain this to me", "help me write an email", "give me a meal plan", "summarize this"). If the average person's first instinct would be to open ChatGPT for this, it's not an app.
+- Already have a well-known app (Shazam, Duolingo, Screen Time, MyFitnessPal, etc.)
+- Are too vague or generic ("productivity app", "wellness tracker")
 
-GOOD ideas MUST have at least ONE of these that an LLM fundamentally cannot do:
-- Connects to real-time external data (live prices, inventory, sensor data, APIs)
-- Requires persistent state across weeks/months that the user builds up over time AND can't just paste into a chat
-- Involves coordination between multiple people (marketplace, matching, scheduling)
-- Needs hardware/device integration (camera, location, bluetooth, notifications)
-- Has a network effect (gets better with more users)
+GOOD ideas can use AI/LLMs under the hood — that's fine! The key test is:
+"Would a normal non-technical person ACTUALLY think to use ChatGPT for this?"
 
-Ask yourself: "Could a smart person get this done in a 5-minute ChatGPT conversation?" If yes, REJECT IT.
+Examples of GOOD ideas (uses AI but nobody would think to open ChatGPT for it):
+- Stamp/coin identifier app (photograph → instant value estimate)
+- Plant disease detector (snap a photo of a sick leaf → diagnosis)
+- Parking spot finder using real-time camera feeds
+- Niche marketplace connecting specific types of people
+
+Examples of BAD ideas (people already use ChatGPT for this):
+- "Help me prepare for a job interview" — everyone already does this with ChatGPT
+- "Explain medical terms simply" — that's literally a prompt
+- "Generate a workout plan" — ChatGPT's most common use case
 
 Ignore off-topic comments, spam, memes, and purely positive reactions.
 
