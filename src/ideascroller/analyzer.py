@@ -57,15 +57,18 @@ Examples of BAD: interview prep, meal planning, summarizing articles"""
 
 _MODE_STRICT = """
 FILTER (very strict):
-- Reject ANYTHING a normal person would think to ask ChatGPT for
-- Reject ANYTHING that already has a well-known app
-- Reject ideas where the core value is just "ask questions and get answers"
-- The idea MUST require at least one of: real-time external data, persistent state over time, multi-user coordination, hardware/device integration, or a network effect
-- The pain point must appear across many comments — if only a few people mention it, skip it
+- The app CAN use AI/LLMs under the hood — that's totally fine
+- But reject ideas where a normal person would EVER think "I could just ask ChatGPT this"
+- The idea needs a very specific, niche use case that nobody associates with chatbots
+- Reject anything that already has a well-known app
+- The pain point must appear across many comments — not just a few people
 
-"Could a normal person get 70% of this value in a 5-minute ChatGPT conversation?" If yes, REJECT.
+Think of it like this: a stamp identifier app uses AI vision, but NOBODY would open ChatGPT to identify a stamp. That's the bar. The app solves a specific problem in a way that feels like its own thing, not like "talking to an AI."
 
-Only surface ideas that are genuinely impossible to replicate with a general-purpose chatbot. Return NOTHING rather than returning a mediocre idea."""
+Examples of GOOD (strict): plant disease scanner, real-time parking finder, niche marketplace, receipt splitter for friend groups
+Examples of BAD (strict): writing assistant, study helper, recipe generator, interview prep — even if they have a nice UI, people associate these with ChatGPT
+
+Return NOTHING rather than returning a mediocre idea."""
 
 _MODES = {
     "relaxed": _BASE_PROMPT + _MODE_RELAXED + _JSON_SCHEMA,
