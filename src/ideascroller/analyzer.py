@@ -1,12 +1,9 @@
-"""LLM analysis of scraped TikTok comments using Anthropic Claude."""
+"""LLM analysis of scraped TikTok comments — supports Anthropic, OpenAI, and Google."""
 
-import asyncio
 import json
 import logging
 import traceback
 from typing import Optional
-
-from anthropic import AsyncAnthropic
 
 from ideascroller.models import AnalysisCluster, AnalysisResult, Comment, Video
 
@@ -62,9 +59,68 @@ Respond with ONLY valid JSON matching the same schema:
   ]
 }"""
 
-# Max ~50 videos per batch to stay well within context limits
 BATCH_SIZE = 50
 
+
+# ---------------------------------------------------------------------------
+# Provider abstraction — each returns a raw text response
+# ---------------------------------------------------------------------------
+
+async def _call_anthropic(api_key: str, system: str, user_prompt: str) -> str:
+    from anthropic import AsyncAnthropic
+    client = AsyncAnthropic(api_key=api_key)
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        system=system,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    return response.content[0].text
+
+
+async def _call_openai(api_key: str, system: str, user_prompt: str) -> str:
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=api_key)
+    response = await client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=4096,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    return response.choices[0].message.content
+
+
+async def _call_gemini(api_key: str, system: str, user_prompt: str) -> str:
+    from google import genai
+    client = genai.Client(api_key=api_key)
+    response = await client.aio.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=f"{system}\n\n{user_prompt}",
+    )
+    return response.text
+
+
+def detect_provider(keys: dict[str, str]) -> tuple[str, str, callable]:
+    """Detect which provider to use based on which API key is set.
+
+    Returns (provider_name, api_key, call_function).
+    """
+    if keys.get("ANTHROPIC_API_KEY"):
+        return "Anthropic (Claude)", keys["ANTHROPIC_API_KEY"], _call_anthropic
+    if keys.get("OPENAI_API_KEY"):
+        return "OpenAI (GPT-4o)", keys["OPENAI_API_KEY"], _call_openai
+    if keys.get("GEMINI_API_KEY"):
+        return "Google (Gemini)", keys["GEMINI_API_KEY"], _call_gemini
+    raise ValueError(
+        "No API key found. Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY in .env"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Prompt building and JSON parsing
+# ---------------------------------------------------------------------------
 
 def build_analysis_prompt(videos: list[Video], comments: list[Comment]) -> str:
     if not comments:
@@ -93,7 +149,7 @@ def build_analysis_prompt(videos: list[Video], comments: list[Comment]) -> str:
 
 
 def _parse_json_response(raw_text: str) -> dict:
-    """Parse Claude's response, stripping markdown fences if present."""
+    """Parse LLM response, stripping markdown fences if present."""
     json_text = raw_text.strip()
     if json_text.startswith("```"):
         json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
@@ -117,34 +173,40 @@ def _chunk_by_video(
     for video in videos:
         current_videos.append(video)
         current_comments.extend(comments_by_video.get(video.id, []))
-
         if len(current_videos) >= batch_size:
             batches.append((list(current_videos), list(current_comments)))
             current_videos = []
             current_comments = []
 
-    # Don't forget the last batch
     if current_videos:
         batches.append((current_videos, current_comments))
 
     return batches
 
 
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
 async def analyze_comments(
-    api_key: str,
+    api_keys: dict[str, str],
     session_id: str,
     videos: list[Video],
     comments: list[Comment],
     on_log: Optional[callable] = None,
 ) -> AnalysisResult:
-    """Analyze comments — chunks automatically if there are too many videos."""
+    """Analyze comments using whichever LLM provider has a key set.
+
+    api_keys: dict with possible keys ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY
+    """
     if not comments:
         return AnalysisResult(
             session_id=session_id, clusters=[], raw_response="No comments to analyze"
         )
 
     log = on_log or (lambda msg: logger.info(msg))
-    client = AsyncAnthropic(api_key=api_key)
+    provider_name, api_key, call_fn = detect_provider(api_keys)
+    log(f"Using {provider_name} for analysis")
 
     batches = _chunk_by_video(videos, comments)
     log(f"Analyzing {len(comments)} comments from {len(videos)} videos in {len(batches)} batch(es)")
@@ -154,24 +216,15 @@ async def analyze_comments(
 
     for i, (batch_videos, batch_comments) in enumerate(batches):
         log(f"  Batch {i + 1}/{len(batches)}: {len(batch_comments)} comments from {len(batch_videos)} videos")
-
         prompt = build_analysis_prompt(batch_videos, batch_comments)
 
         try:
-            response = await client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=4096,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw_text = response.content[0].text
+            raw_text = await call_fn(api_key, _SYSTEM_PROMPT, prompt)
             raw_responses.append(raw_text)
-
             parsed = _parse_json_response(raw_text)
             batch_clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
             all_clusters.extend(batch_clusters)
             log(f"  Batch {i + 1}: found {len(batch_clusters)} clusters")
-
         except Exception as e:
             logger.error("Batch %d failed: %s\n%s", i + 1, e, traceback.format_exc())
             log(f"  Batch {i + 1} failed: {e}")
@@ -181,7 +234,6 @@ async def analyze_comments(
             session_id=session_id, clusters=[], raw_response="All batches failed"
         )
 
-    # If only one batch, no merge needed
     if len(batches) == 1:
         return AnalysisResult(
             session_id=session_id,
@@ -189,22 +241,16 @@ async def analyze_comments(
             raw_response=raw_responses[0] if raw_responses else "",
         )
 
-    # Multiple batches — merge the clusters
+    # Multiple batches — merge
     log(f"Merging {len(all_clusters)} clusters from {len(batches)} batches...")
-
     merge_input = json.dumps(
-        {"clusters": [c.model_dump() for c in all_clusters]},
-        indent=2,
+        {"clusters": [c.model_dump() for c in all_clusters]}, indent=2,
     )
 
     try:
-        merge_response = await client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            system=_MERGE_PROMPT,
-            messages=[{"role": "user", "content": f"Merge these clusters:\n\n{merge_input}"}],
+        merge_raw = await call_fn(
+            api_key, _MERGE_PROMPT, f"Merge these clusters:\n\n{merge_input}"
         )
-        merge_raw = merge_response.content[0].text
         parsed = _parse_json_response(merge_raw)
         merged_clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
         log(f"Merged into {len(merged_clusters)} final clusters")
@@ -217,7 +263,6 @@ async def analyze_comments(
     except Exception as e:
         logger.error("Merge failed: %s", e)
         log(f"Merge failed, returning unmerged clusters: {e}")
-        # Return unmerged clusters as fallback
         return AnalysisResult(
             session_id=session_id,
             clusters=all_clusters,

@@ -35,9 +35,9 @@ async def test_analyze_returns_clusters():
     })
     mock_client = AsyncMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
-    with patch("ideascroller.analyzer.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await analyze_comments(
-            api_key="test-key",
+            api_keys={"ANTHROPIC_API_KEY": "test-key"},
             session_id="test",
             videos=[Video(id="v1", session_id="test", author="u",
                           description="d", comment_count=100, url="url")],
@@ -51,7 +51,7 @@ async def test_analyze_returns_clusters():
 
 async def test_analyze_empty_comments():
     result = await analyze_comments(
-        api_key="test-key",
+        api_keys={"ANTHROPIC_API_KEY": "test-key"},
         session_id="test",
         videos=[],
         comments=[],

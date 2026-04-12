@@ -1,0 +1,12 @@
+- generic [active] [ref=e1]:
+  - img
+  - main [ref=e33]:
+    - generic [ref=e34]:
+      - article [ref=e35]:
+        - region "Watch in full screen" [ref=e37] [cursor=pointer]
+      - article [ref=e51]:
+        - region "Watch in full screen" [ref=e53] [cursor=pointer]:
+          - 'img "first trip of 2026 #traveltok #girlstrip" [ref=e58]'
+      - article [ref=e68]
+      - img [ref=e69]
+    - complementary

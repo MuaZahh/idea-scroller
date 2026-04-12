@@ -62,28 +62,41 @@ class AppState:
 _state = AppState()
 
 
-def _get_api_key() -> str:
-    """Read API key fresh from .env file every time."""
-    # Try multiple locations for .env
+_API_KEY_NAMES = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"]
+
+
+def _get_api_keys() -> dict[str, str]:
+    """Read all API keys fresh from .env file every time."""
+    keys: dict[str, str] = {}
+
+    # Read from .env files
     candidates = [
         Path.cwd() / ".env",
-        Path(__file__).parent.parent.parent / ".env",  # src/ideascroller/../../.env
+        Path(__file__).parent.parent.parent / ".env",
     ]
     for env_path in candidates:
         if env_path.exists():
             for line in env_path.read_text().splitlines():
-                if line.startswith("ANTHROPIC_API_KEY="):
-                    key = line.split("=", 1)[1].strip().strip('"').strip("'").strip()
-                    if key:
-                        logger.info("API key loaded from %s: %s...%s", env_path, key[:10], key[-5:])
-                        return key
-    # Fallback to env var
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if key:
-        logger.info("API key from env var: %s...%s", key[:10], key[-5:])
+                for name in _API_KEY_NAMES:
+                    if line.startswith(f"{name}="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'").strip()
+                        if val and name not in keys:
+                            keys[name] = val
+
+    # Also check env vars
+    for name in _API_KEY_NAMES:
+        if name not in keys:
+            val = os.environ.get(name, "").strip()
+            if val:
+                keys[name] = val
+
+    if keys:
+        found = [k for k in keys]
+        logger.info("API keys found: %s", ", ".join(found))
     else:
-        logger.error("No ANTHROPIC_API_KEY found in .env or environment")
-    return key
+        logger.error("No API keys found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY in .env")
+
+    return keys
 
 
 def create_app(db_path: str = "ideascroller.db") -> FastAPI:
@@ -123,10 +136,10 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                     len(_state.scraper.comments),
                 )
 
-                # Run Claude analysis if we have comments
-                api_key = _get_api_key()
-                if _state.scraper.comments and api_key:
-                    logger.info("Running Claude analysis before shutdown...")
+                # Run LLM analysis if we have comments
+                api_keys = _get_api_keys()
+                if _state.scraper.comments and api_keys:
+                    logger.info("Running LLM analysis before shutdown...")
                     session = await _state.db.get_session(session_id)
                     if session:
                         updated = session.model_copy(update={
@@ -144,7 +157,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
 
                         from ideascroller.analyzer import analyze_comments
                         result = await analyze_comments(
-                            api_key=api_key,
+                            api_keys=api_keys,
                             session_id=session_id,
                             videos=videos,
                             comments=comments,
@@ -172,7 +185,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                             updated = session.model_copy(update={"status": SessionStatus.ERROR})
                             await _state.db.update_session(updated)
                 else:
-                    if not api_key:
+                    if not api_keys:
                         logger.warning("No ANTHROPIC_API_KEY set — skipping analysis")
                     session = await _state.db.get_session(session_id)
                     if session:
@@ -293,7 +306,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
         })
 
         try:
-            api_key = _get_api_key()
+            api_keys = _get_api_keys()
             videos = await _state.db.get_videos(session_id)
             comments = await _state.db.get_session_comments(session_id)
 
@@ -308,7 +321,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                 })
 
             result = await analyze_comments(
-                api_key=api_key,
+                api_keys=api_keys,
                 session_id=session_id,
                 videos=videos,
                 comments=comments,
