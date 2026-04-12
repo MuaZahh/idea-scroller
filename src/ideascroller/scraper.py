@@ -3,6 +3,8 @@
 import asyncio
 import logging
 import re
+import subprocess
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -102,10 +104,36 @@ class Scraper:
             logger.debug("Failed to parse response %s: %s", url[:80], e)
 
     @staticmethod
-    def _get_profile_dir(chrome_user_data_dir: str) -> str:
-        profile_dir = Path.home() / ".ideascroller" / "profile"
-        profile_dir.mkdir(parents=True, exist_ok=True)
-        return str(profile_dir)
+    def _find_chrome_binary() -> str:
+        """Find the real Chrome binary on macOS."""
+        candidates = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+        for path in candidates:
+            if Path(path).exists():
+                return path
+        raise FileNotFoundError("Could not find Google Chrome. Install it from google.com/chrome")
+
+    def _launch_chrome_with_debugging(self) -> subprocess.Popen:
+        """Launch the user's real Chrome with remote debugging enabled."""
+        chrome_bin = self._find_chrome_binary()
+        chrome_data_dir = self._chrome_dir
+
+        # Launch Chrome with remote debugging on port 9222
+        proc = subprocess.Popen(
+            [
+                chrome_bin,
+                f"--user-data-dir={chrome_data_dir}",
+                "--remote-debugging-port=9222",
+                "--no-first-run",
+                "--no-default-browser-check",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return proc
 
     # ------------------------------------------------------------------
     # DOM helpers — all scoped to the VISIBLE article element
@@ -230,36 +258,42 @@ class Scraper:
     # ------------------------------------------------------------------
 
     async def run(self, session_id: str) -> None:
-        profile_dir = self._get_profile_dir(self._chrome_dir)
-        self._log("Launching browser...")
+        self._log("Closing any existing Chrome instances...")
+
+        # Kill existing Chrome so we can relaunch with debugging
+        subprocess.run(["pkill", "-f", "Google Chrome"], capture_output=True)
+        await asyncio.sleep(2)
+
+        self._log("Launching Chrome with your account...")
+        chrome_proc = self._launch_chrome_with_debugging()
+
+        # Wait for Chrome debugging port to be ready
+        for i in range(15):
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get("http://127.0.0.1:9222/json/version")
+                    if resp.status_code == 200:
+                        break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+        else:
+            self._log("Chrome failed to start with debugging port")
+            chrome_proc.terminate()
+            return
+
+        self._log("Connecting to Chrome...")
 
         async with async_playwright() as pw:
-            context = await pw.chromium.launch_persistent_context(
-                profile_dir,
-                headless=False,
-                viewport={"width": 1280, "height": 900},
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-            page = context.pages[0] if context.pages else await context.new_page()
+            browser = await pw.chromium.connect_over_cdp("http://127.0.0.1:9222")
+            context = browser.contexts[0] if browser.contexts else await browser.new_context()
+            page = await context.new_page()
             page.on("response", self._handle_response)
 
             self._log("Navigating to TikTok FYP...")
             await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
             await asyncio.sleep(3)
-
-            # Handle login if needed
-            if "login" in page.url.lower():
-                self._log("TikTok login required — log in manually in the browser")
-                while "login" in page.url.lower() and not self._stop_event.is_set():
-                    await asyncio.sleep(3)
-                if self._stop_event.is_set():
-                    await context.close()
-                    return
-                self._log("Login detected! Navigating to FYP...")
-                await page.goto(
-                    "https://www.tiktok.com/foryou", wait_until="networkidle"
-                )
-                await asyncio.sleep(3)
 
             self._log("Starting scroll loop...")
             last_article_id = ""
@@ -333,8 +367,9 @@ class Scraper:
                 await page.keyboard.press("ArrowDown")
                 await asyncio.sleep(1.5)
 
-            self._log("Scroll loop stopped. Closing browser...")
-            await context.close()
+            self._log("Scroll loop stopped. Closing tab...")
+            await page.close()
+            browser.close()
 
     # ------------------------------------------------------------------
     # Comment scraping — scoped to the correct article
