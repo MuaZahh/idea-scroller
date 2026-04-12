@@ -133,12 +133,25 @@ class Scraper:
                 await asyncio.sleep(3)
 
             self._log("Starting scroll loop...")
+            last_index = -1
             while not self._stop_event.is_set():
-                await self._process_current_video(page, session_id)
+                # Wait for scroll index to change (video snapped into view)
+                current_index = await self._get_visible_scroll_index(page)
+                if current_index == last_index:
+                    # Same video still visible, wait a bit more
+                    await asyncio.sleep(0.5)
+                    current_index = await self._get_visible_scroll_index(page)
+
+                if current_index != last_index:
+                    last_index = current_index
+                    await self._process_current_video(page, session_id)
+
                 if self._stop_event.is_set():
                     break
+
                 await page.keyboard.press("ArrowDown")
-                await asyncio.sleep(1)
+                # Wait for the snap animation to complete
+                await asyncio.sleep(1.2)
             self._log("Scroll loop stopped. Closing browser...")
             await context.close()
 
