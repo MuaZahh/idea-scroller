@@ -49,6 +49,7 @@ class ConfigUpdate(BaseModel):
     comment_threshold: Optional[int] = None
     max_comments_per_video: Optional[int] = None
     max_videos: Optional[int] = None
+    analysis_mode: Optional[str] = None
 
 
 class AppState:
@@ -163,6 +164,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                             session_id=session_id,
                             videos=videos,
                             comments=comments,
+                            mode=_state.settings.analysis_mode,
                         )
                         await _state.db.save_analysis(result)
 
@@ -246,6 +248,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                 videos=videos,
                 comments=comments,
                 on_log=broadcast_log,
+                mode=_state.settings.analysis_mode,
             )
             await _state.db.save_analysis(result)
 
@@ -286,6 +289,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
             "comment_threshold": _state.settings.comment_threshold,
             "max_comments_per_video": _state.settings.max_comments_per_video,
             "max_videos": _state.settings.max_videos,
+            "analysis_mode": _state.settings.analysis_mode,
         }
 
     @app.put("/config")
@@ -296,10 +300,13 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
             _state.settings.max_comments_per_video = update.max_comments_per_video
         if update.max_videos is not None:
             _state.settings.max_videos = update.max_videos
+        if update.analysis_mode is not None and update.analysis_mode in ("relaxed", "balanced", "strict"):
+            _state.settings.analysis_mode = update.analysis_mode
         return {
             "comment_threshold": _state.settings.comment_threshold,
             "max_comments_per_video": _state.settings.max_comments_per_video,
             "max_videos": _state.settings.max_videos,
+            "analysis_mode": _state.settings.analysis_mode,
         }
 
     @app.post("/start")
@@ -416,6 +423,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
                 videos=videos,
                 comments=comments,
                 on_log=broadcast_log,
+                mode=_state.settings.analysis_mode,
             )
             await _state.db.save_analysis(result)
 

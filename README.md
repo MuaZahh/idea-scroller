@@ -58,28 +58,19 @@ open `http://localhost:8000` in your browser. hit start. let it scroll for a bit
 
 first time it'll ask you to log into tiktok in the browser window. after that it remembers you.
 
-### modes
+### strictness modes
 
-pick a mode in the UI dropdown:
+controls how critically the AI judges app ideas. pick in the UI dropdown:
 
-| mode | min comments | per video | max videos | time |
-|------|-------------|-----------|------------|------|
-| **Quick** | 500+ | 20 | 15 | ~2 min |
-| **Balanced** | 300+ | 50 | 30 | ~5 min |
-| **Thorough** | 100+ | 50 | unlimited | ~15+ min |
+| mode | what it does |
+|------|-------------|
+| **Relaxed** | most permissive — just filters out existing apps and vague ideas. good for brainstorming. |
+| **Balanced** | filters out anything a normal person would think to use ChatGPT for. default. |
+| **Strict** | extremely critical — idea must require real-time data, multi-user coordination, or hardware integration. rejects anything a chatbot could do. |
 
-**quick** is for a fast scan — only grabs the most viral videos. **balanced** is the default, good mix of speed and coverage. **thorough** scrolls until you stop it, catches everything.
+**strict mode might return nothing** even after a long session. that's by design — no result is better than a bad result. if you're getting empty results, try **relaxed** or scroll longer.
 
-you can also tweak each setting manually after picking a mode.
-
-### heads up
-
-the analysis is very critical. it filters out ideas that:
-- a normal person would already think to use ChatGPT for
-- already have a well-known app
-- don't have enough people talking about them (300+ comments minimum)
-
-**this means sometimes it might return nothing**, even after a long session. that's by design — no result is better than a bad result. if you're getting empty results, try **thorough** mode and let it scroll longer. more data = better chance of finding something real.
+the scraping settings (min comments, per video, max videos) are separate and always configurable.
 
 ### settings (advanced)
 

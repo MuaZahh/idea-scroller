@@ -9,39 +9,7 @@ from ideascroller.models import AnalysisCluster, AnalysisResult, Comment, Video
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are an expert product researcher analyzing TikTok comments to discover app and SaaS opportunities.
-
-You will receive comments from TikTok videos grouped by video. Your job is to find the BEST app/SaaS idea hidden in these comments.
-
-Look for:
-- Pain points that MANY people share — at minimum the theme should appear across 300+ comments or multiple videos. If only a handful of people mention it, it's not worth reporting.
-- Frustrations people feel strongly about (intensity matters)
-- Problems that could realistically be solved with software
-- Ideas where people are literally asking for a solution
-
-HARD FILTER — reject ideas that:
-- Are something a normal person WOULD already think to ask ChatGPT (e.g. "explain this to me", "help me write an email", "give me a meal plan", "summarize this"). If the average person's first instinct would be to open ChatGPT for this, it's not an app.
-- Already have a well-known app (Shazam, Duolingo, Screen Time, MyFitnessPal, etc.)
-- Are too vague or generic ("productivity app", "wellness tracker")
-
-GOOD ideas can use AI/LLMs under the hood — that's fine! The key test is:
-"Would a normal non-technical person ACTUALLY think to use ChatGPT for this?"
-
-Examples of GOOD ideas (uses AI but nobody would think to open ChatGPT for it):
-- Stamp/coin identifier app (photograph → instant value estimate)
-- Plant disease detector (snap a photo of a sick leaf → diagnosis)
-- Parking spot finder using real-time camera feeds
-- Niche marketplace connecting specific types of people
-
-Examples of BAD ideas (people already use ChatGPT for this):
-- "Help me prepare for a job interview" — everyone already does this with ChatGPT
-- "Explain medical terms simply" — that's literally a prompt
-- "Generate a workout plan" — ChatGPT's most common use case
-
-Ignore off-topic comments, spam, memes, and purely positive reactions.
-
-Return only the SINGLE BEST idea you can find. If there's genuinely a second or third strong one, include those too — but don't pad it. One great idea beats three mediocre ones.
-
+_JSON_SCHEMA = """
 Respond with ONLY valid JSON:
 {
   "clusters": [
@@ -56,6 +24,57 @@ Respond with ONLY valid JSON:
     }
   ]
 }"""
+
+_BASE_PROMPT = """You are an expert product researcher analyzing TikTok comments to discover app and SaaS opportunities.
+
+You will receive comments from TikTok videos grouped by video. Your job is to find the BEST app/SaaS idea hidden in these comments.
+
+Look for:
+- Pain points many people share (frequency matters)
+- Frustrations people feel strongly about (intensity matters)
+- Problems that could realistically be solved with software
+- Ideas where people are literally asking for a solution
+
+Ignore off-topic comments, spam, memes, and purely positive reactions.
+Return only the SINGLE BEST idea you can find. If there's genuinely a second or third strong one, include those too — but don't pad it. One great idea beats three mediocre ones."""
+
+_MODE_RELAXED = """
+FILTER (relaxed):
+- Reject ideas that already have a well-known app (Shazam, Duolingo, etc.)
+- Reject ideas that are too vague ("productivity app", "wellness tracker")
+- It's fine if an LLM could technically do it — focus on whether it's a real pain point people would pay to solve"""
+
+_MODE_BALANCED = """
+FILTER (balanced):
+- Reject ideas that a normal person WOULD already think to ask ChatGPT for (e.g. "help me write an email", "give me a meal plan"). If the average person's first instinct would be to open ChatGPT for this, it's not an app.
+- Reject ideas that already have a well-known app (Shazam, Duolingo, Screen Time, etc.)
+- Reject ideas that are too vague or generic
+
+GOOD ideas can use AI under the hood — the test is: "Would a normal person ACTUALLY think to use ChatGPT for this?" If no, it's a valid app idea.
+
+Examples of GOOD: stamp identifier, plant disease detector, parking spot finder
+Examples of BAD: interview prep, meal planning, summarizing articles"""
+
+_MODE_STRICT = """
+FILTER (very strict):
+- Reject ANYTHING a normal person would think to ask ChatGPT for
+- Reject ANYTHING that already has a well-known app
+- Reject ideas where the core value is just "ask questions and get answers"
+- The idea MUST require at least one of: real-time external data, persistent state over time, multi-user coordination, hardware/device integration, or a network effect
+- The pain point must appear across many comments — if only a few people mention it, skip it
+
+"Could a normal person get 70% of this value in a 5-minute ChatGPT conversation?" If yes, REJECT.
+
+Only surface ideas that are genuinely impossible to replicate with a general-purpose chatbot. Return NOTHING rather than returning a mediocre idea."""
+
+_MODES = {
+    "relaxed": _BASE_PROMPT + _MODE_RELAXED + _JSON_SCHEMA,
+    "balanced": _BASE_PROMPT + _MODE_BALANCED + _JSON_SCHEMA,
+    "strict": _BASE_PROMPT + _MODE_STRICT + _JSON_SCHEMA,
+}
+
+def _get_system_prompt(mode: str = "balanced") -> str:
+    return _MODES.get(mode, _MODES["balanced"])
 
 _MERGE_PROMPT = """You are merging multiple batches of pain point analysis from TikTok comments.
 
@@ -215,9 +234,11 @@ async def analyze_comments(
     videos: list[Video],
     comments: list[Comment],
     on_log: Optional[callable] = None,
+    mode: str = "balanced",
 ) -> AnalysisResult:
     """Analyze comments using whichever LLM provider has a key set.
 
+    mode: "relaxed", "balanced", or "strict" — controls how critically ideas are filtered.
     api_keys: dict with possible keys ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY
     """
     if not comments:
@@ -243,7 +264,8 @@ async def analyze_comments(
             except RuntimeError:
                 pass
     provider_name, api_key, call_fn = detect_provider(api_keys)
-    log(f"Using {provider_name} for analysis")
+    system_prompt = _get_system_prompt(mode)
+    log(f"Using {provider_name} for analysis (mode: {mode})")
 
     batches = _chunk_by_video(videos, comments)
     log(f"Analyzing {len(comments)} comments from {len(videos)} videos in {len(batches)} batch(es)")
@@ -256,7 +278,7 @@ async def analyze_comments(
         prompt = build_analysis_prompt(batch_videos, batch_comments)
 
         try:
-            raw_text = await call_fn(api_key, _SYSTEM_PROMPT, prompt)
+            raw_text = await call_fn(api_key, system_prompt, prompt)
             raw_responses.append(raw_text)
             parsed = _parse_json_response(raw_text)
             batch_clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]

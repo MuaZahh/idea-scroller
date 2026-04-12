@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     comment_threshold: int = 300
     max_comments_per_video: int = 30
     max_videos: int = 0  # 0 = unlimited
+    analysis_mode: str = "balanced"  # relaxed, balanced, strict
     host: str = "127.0.0.1"
     port: int = 8000
 

@@ -130,11 +130,11 @@
             <div class="subtitle">TikTok pain point discovery</div>
         </div>
         <div class="settings">
-            <label>Mode:
+            <label>Strictness:
                 <select id="modeSelect">
-                    <option value="quick">Quick (~2 min)</option>
-                    <option value="balanced" selected>Balanced (~5 min)</option>
-                    <option value="thorough">Thorough (~15 min)</option>
+                    <option value="relaxed">Relaxed</option>
+                    <option value="balanced" selected>Balanced</option>
+                    <option value="strict">Strict</option>
                 </select>
             </label>
             <label>Min comments: <input type="number" id="threshold" value="300" min="1"></label>
@@ -238,6 +238,7 @@
                 comment_threshold: parseInt(document.getElementById('threshold').value),
                 max_comments_per_video: parseInt(document.getElementById('maxComments').value),
                 max_videos: parseInt(document.getElementById('maxVideos').value),
+                analysis_mode: document.getElementById('modeSelect').value,
             };
             fetch('/config', {
                 method: 'PUT',
@@ -444,24 +445,7 @@
             _origRenderClusters(clusters);
         };
 
-        // Mode presets
-        var modePresets = {
-            quick:    { threshold: 500,  maxComments: 20,  maxVideos: 15  },
-            balanced: { threshold: 300,  maxComments: 50,  maxVideos: 30  },
-            thorough: { threshold: 100,  maxComments: 50,  maxVideos: 0   },
-        };
-
-        function applyMode(mode) {
-            var preset = modePresets[mode];
-            if (!preset) return;
-            document.getElementById('threshold').value = preset.threshold;
-            document.getElementById('maxComments').value = preset.maxComments;
-            document.getElementById('maxVideos').value = preset.maxVideos;
-        }
-
-        document.getElementById('modeSelect').addEventListener('change', function() {
-            applyMode(this.value);
-        });
+        // Mode only affects LLM strictness — no scraping changes
 
         document.getElementById('startBtn').addEventListener('click', startScrolling);
         document.getElementById('stopBtn').addEventListener('click', stopScrolling);
@@ -475,6 +459,7 @@
             document.getElementById('threshold').value = data.comment_threshold;
             document.getElementById('maxComments').value = data.max_comments_per_video;
             document.getElementById('maxVideos').value = data.max_videos;
+            if (data.analysis_mode) document.getElementById('modeSelect').value = data.analysis_mode;
         });
     </script>
 </body>
