@@ -75,17 +75,19 @@ class Scraper:
     async def _handle_response(self, response: Response) -> None:
         url = response.url
         try:
-            if "/api/post/item_list/" in url or "/api/recommend/item_list/" in url:
+            if "/api/post/item_list/" in url or "/api/recommend/item_list/" in url or "/api/preload/item_list/" in url:
                 body = await response.json()
                 items = body.get("itemList", [])
-                self._intercepted_video_items.extend(items)
+                if items:
+                    self._intercepted_video_items.extend(items)
+                    self._log(f"Intercepted {len(items)} video items from API (total: {len(self._intercepted_video_items)})")
             elif "/api/comment/list/" in url:
                 body = await response.json()
                 comments_data = body.get("comments", [])
                 if comments_data:
                     self._intercepted_comments.extend(comments_data)
         except Exception as e:
-            logger.debug("Failed to parse intercepted response: %s", e)
+            logger.debug("Failed to parse intercepted response %s: %s", url[:100], e)
 
     @staticmethod
     def _get_profile_dir(chrome_user_data_dir: str) -> str:
@@ -140,57 +142,61 @@ class Scraper:
             self._log("Scroll loop stopped. Closing browser...")
             await context.close()
 
-    async def _get_current_video_id(self, page: Page) -> Optional[str]:
-        """Extract video ID from the currently visible video element.
-
-        TikTok FYP URL stays as /foryou and doesn't update per video,
-        so we extract the ID from link elements within the visible video.
-        """
-        # Try to find a video link in the currently visible video container
+    async def _get_visible_scroll_index(self, page: Page) -> int:
+        """Get the data-scroll-index of the currently visible video article."""
         try:
-            video_id = await page.evaluate("""() => {
-                // Find the currently visible video container
-                const containers = document.querySelectorAll('div[data-e2e="recommend-list-item-container"]');
-                for (const container of containers) {
-                    const rect = container.getBoundingClientRect();
-                    // Check if this container is in the viewport
-                    if (rect.top >= -100 && rect.top < window.innerHeight / 2) {
-                        // Look for a link with /video/ in href
-                        const links = container.querySelectorAll('a[href*="/video/"]');
+            index = await page.evaluate("""() => {
+                const articles = document.querySelectorAll('article[data-e2e="recommend-list-item-container"]');
+                for (const art of articles) {
+                    const rect = art.getBoundingClientRect();
+                    if (rect.top >= -200 && rect.top < window.innerHeight / 2) {
+                        return parseInt(art.getAttribute('data-scroll-index') || '-1');
+                    }
+                }
+                return -1;
+            }""")
+            return index
+        except Exception:
+            return -1
+
+    async def _get_visible_author(self, page: Page) -> Optional[str]:
+        """Get the author username from the currently visible video."""
+        try:
+            # Try multiple selectors — TikTok changes these
+            author = await page.evaluate("""() => {
+                // Find the visible video section
+                const sections = document.querySelectorAll('section[data-e2e="feed-video"]');
+                for (const section of sections) {
+                    const rect = section.getBoundingClientRect();
+                    if (rect.top >= -200 && rect.top < window.innerHeight / 2) {
+                        // Look for author link (/@username)
+                        const links = section.querySelectorAll('a[href*="/@"]');
                         for (const link of links) {
-                            const match = link.href.match(/\\/video\\/(\\d+)/);
+                            const match = link.href.match(/\\/@([^/?]+)/);
                             if (match) return match[1];
                         }
                     }
                 }
-                // Fallback: check the page URL
-                const urlMatch = window.location.href.match(/\\/video\\/(\\d+)/);
-                if (urlMatch) return urlMatch[1];
-                // Fallback: find any visible video link
-                const allLinks = document.querySelectorAll('a[href*="/video/"]');
-                for (const link of allLinks) {
-                    const rect = link.getBoundingClientRect();
-                    if (rect.top >= 0 && rect.top < window.innerHeight) {
-                        const match = link.href.match(/\\/video\\/(\\d+)/);
-                        if (match) return match[1];
-                    }
-                }
                 return null;
             }""")
-            return video_id
+            return author
         except Exception:
-            pass
+            return None
 
-        # Fallback: check URL
-        url_id = self._extract_video_id(page.url)
-        if url_id:
-            return url_id
+    def _find_item_by_index(self, scroll_index: int) -> Optional[dict]:
+        """Find intercepted video item by its position in the feed."""
+        if scroll_index >= 0 and scroll_index < len(self._intercepted_video_items):
+            return self._intercepted_video_items[scroll_index]
+        return None
 
-        # Fallback: use most recent intercepted video item
-        if self._intercepted_video_items:
-            latest = self._intercepted_video_items[-1]
-            return latest.get("id")
-
+    def _find_item_by_author(self, author: str) -> Optional[dict]:
+        """Find intercepted video item by author username (fallback)."""
+        if not author:
+            return None
+        # Search in reverse (most recently added items first)
+        for item in reversed(self._intercepted_video_items):
+            if item.get("author", {}).get("uniqueId") == author:
+                return item
         return None
 
     async def _process_current_video(self, page: Page, session_id: str) -> None:
@@ -204,18 +210,36 @@ class Scraper:
         except Exception:
             comment_count = 0
 
-        # Get video ID from DOM or intercepted data
-        video_id = await self._get_current_video_id(page)
+        # Get the scroll index and author from the visible video
+        scroll_index = await self._get_visible_scroll_index(page)
+        visible_author = await self._get_visible_author(page)
 
-        # Try to get more accurate count from intercepted XHR data
-        if video_id and self._intercepted_video_items:
-            for item in self._intercepted_video_items:
-                if item.get("id") == video_id:
-                    comment_count = item.get("stats", {}).get("commentCount", comment_count)
-                    break
+        # Try to find the video item from intercepted XHR data
+        item = self._find_item_by_index(scroll_index)
+        if not item and visible_author:
+            item = self._find_item_by_author(visible_author)
 
-        self._log(f"Video #{self._videos_scanned}: {comment_count} comments" +
-                  (f" (id: {video_id})" if video_id else " (no ID)"))
+        video_id: Optional[str] = None
+        if item:
+            video_id = item.get("id")
+            # Use the more accurate comment count from the API
+            api_count = item.get("stats", {}).get("commentCount")
+            if api_count is not None:
+                comment_count = api_count
+
+        # Last resort: check the URL (works on individual video pages)
+        if not video_id:
+            video_id = self._extract_video_id(page.url)
+
+        id_source = ""
+        if item and video_id:
+            id_source = f" (id: {video_id}, idx: {scroll_index})"
+        elif video_id:
+            id_source = f" (id: {video_id}, from URL)"
+        else:
+            id_source = f" (no ID, idx: {scroll_index}, author: {visible_author}, items: {len(self._intercepted_video_items)})"
+
+        self._log(f"Video #{self._videos_scanned}: {comment_count} comments{id_source}")
         self._update_stats()
 
         if comment_count < self._threshold:
@@ -229,17 +253,13 @@ class Scraper:
             self._log(f"Already scraped video {video_id}, skipping")
             return
 
-        try:
-            author_el = page.locator('h3[data-e2e="video-author-uniqueid"]').first
-            author = await author_el.inner_text(timeout=3000)
-        except Exception:
-            author = "unknown"
+        author = visible_author or item.get("author", {}).get("uniqueId", "unknown") if item else "unknown"
 
         try:
             desc_el = page.locator('div[data-e2e="video-desc"]').first
             description = await desc_el.inner_text(timeout=3000)
         except Exception:
-            description = ""
+            description = item.get("desc", "") if item else ""
 
         current_url = page.url
         video = Video(id=video_id, session_id=session_id, author=author,
