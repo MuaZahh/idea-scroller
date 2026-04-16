@@ -50,6 +50,7 @@ class ConfigUpdate(BaseModel):
     max_comments_per_video: Optional[int] = None
     max_videos: Optional[int] = None
     analysis_mode: Optional[str] = None
+    niche: Optional[str] = None
 
 
 class AppState:
@@ -290,6 +291,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
             "max_comments_per_video": _state.settings.max_comments_per_video,
             "max_videos": _state.settings.max_videos,
             "analysis_mode": _state.settings.analysis_mode,
+            "niche": _state.settings.niche,
         }
 
     @app.put("/config")
@@ -302,11 +304,14 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
             _state.settings.max_videos = update.max_videos
         if update.analysis_mode is not None and update.analysis_mode in ("relaxed", "balanced", "strict"):
             _state.settings.analysis_mode = update.analysis_mode
+        if update.niche is not None:
+            _state.settings.niche = update.niche
         return {
             "comment_threshold": _state.settings.comment_threshold,
             "max_comments_per_video": _state.settings.max_comments_per_video,
             "max_videos": _state.settings.max_videos,
             "analysis_mode": _state.settings.analysis_mode,
+            "niche": _state.settings.niche,
         }
 
     @app.post("/start")
@@ -343,6 +348,7 @@ def create_app(db_path: str = "ideascroller.db") -> FastAPI:
             comment_threshold=_state.settings.comment_threshold,
             max_comments_per_video=_state.settings.max_comments_per_video,
             max_videos=_state.settings.max_videos,
+            niche=_state.settings.niche,
             on_log=sync_log,
             on_stats_update=sync_stats,
         )

@@ -130,6 +130,7 @@
             <div class="subtitle">TikTok pain point discovery</div>
         </div>
         <div class="settings">
+            <label>Niche: <input type="text" id="niche" placeholder="FYP (empty)" style="width:100px;text-align:left;" title="Leave empty for For You page, or enter a topic like cooking, fitness, startups"></label>
             <label>Strictness:
                 <select id="modeSelect">
                     <option value="relaxed">Relaxed</option>
@@ -239,6 +240,7 @@
                 max_comments_per_video: parseInt(document.getElementById('maxComments').value),
                 max_videos: parseInt(document.getElementById('maxVideos').value),
                 analysis_mode: document.getElementById('modeSelect').value,
+                niche: document.getElementById('niche').value.trim(),
             };
             fetch('/config', {
                 method: 'PUT',
@@ -328,6 +330,38 @@
                 idea.textContent = '\uD83D\uDCA1 ' + cluster.app_idea;
                 el.appendChild(idea);
 
+                // Market + competitors
+                if (cluster.market || (cluster.competitors && cluster.competitors.length > 0)) {
+                    var marketDiv = document.createElement('div');
+                    marketDiv.style.cssText = 'font-size:12px;margin-top:8px;color:#888;display:flex;gap:8px;align-items:center;';
+                    var marketColors = { OPEN: '#22c55e', GROWING: '#f59e0b', CROWDED: '#ef4444' };
+                    var mColor = marketColors[cluster.market] || '#888';
+
+                    if (cluster.market) {
+                        var mBadge = document.createElement('span');
+                        mBadge.style.cssText = 'color:' + mColor + ';font-weight:600;';
+                        mBadge.textContent = cluster.market;
+                        marketDiv.appendChild(mBadge);
+                        var mLabel = document.createElement('span');
+                        mLabel.textContent = 'market';
+                        marketDiv.appendChild(mLabel);
+                    }
+                    if (cluster.competitors && cluster.competitors.length > 0) {
+                        var sep = document.createElement('span');
+                        sep.textContent = '\u00B7 Competitors: ' + cluster.competitors.join(', ');
+                        marketDiv.appendChild(sep);
+                    }
+                    el.appendChild(marketDiv);
+                }
+
+                // Edge / differentiator
+                if (cluster.edge) {
+                    var edgeDiv = document.createElement('div');
+                    edgeDiv.style.cssText = 'font-size:12px;margin-top:4px;color:#9ca3af;font-style:italic;';
+                    edgeDiv.textContent = cluster.edge;
+                    el.appendChild(edgeDiv);
+                }
+
                 container.appendChild(el);
             }
         }
@@ -342,6 +376,10 @@
                 md += '## ' + (i + 1) + '. ' + c.theme + '\n\n';
                 md += c.summary + '\n\n';
                 md += '**App idea:** ' + c.app_idea + '\n\n';
+                if (c.market) md += '**Market:** ' + c.market;
+                if (c.competitors && c.competitors.length > 0) md += ' | **Competitors:** ' + c.competitors.join(', ');
+                if (c.market || (c.competitors && c.competitors.length > 0)) md += '\n\n';
+                if (c.edge) md += '**Edge:** ' + c.edge + '\n\n';
                 md += '*' + c.comment_count + ' comments across ' + c.video_count + ' videos*\n\n';
                 if (c.sample_comments && c.sample_comments.length > 0) {
                     md += 'Sample comments:\n';
@@ -460,6 +498,7 @@
             document.getElementById('maxComments').value = data.max_comments_per_video;
             document.getElementById('maxVideos').value = data.max_videos;
             if (data.analysis_mode) document.getElementById('modeSelect').value = data.analysis_mode;
+            if (data.niche) document.getElementById('niche').value = data.niche;
         });
     </script>
 </body>

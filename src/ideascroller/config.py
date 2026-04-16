@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     max_comments_per_video: int = 30
     max_videos: int = 0  # 0 = unlimited
     analysis_mode: str = "balanced"  # relaxed, balanced, strict
+    niche: str = ""  # empty = FYP, otherwise search query or hashtag
     host: str = "127.0.0.1"
     port: int = 8000
 

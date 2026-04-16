@@ -20,6 +20,9 @@ Respond with ONLY valid JSON:
       "video_count": <number of videos where this came up>,
       "potential": "HIGH",
       "app_idea": "One concrete app concept that solves this",
+      "competitors": ["List 1-3 existing apps/tools that partially solve this, or empty if none"],
+      "market": "OPEN | GROWING | CROWDED",
+      "edge": "What specific angle makes this different from existing solutions, or why nothing exists yet",
       "sample_comments": ["3-5 actual comments that show this pain point"]
     }
   ]
@@ -36,7 +39,30 @@ Look for:
 - Ideas where people are literally asking for a solution
 
 Ignore off-topic comments, spam, memes, and purely positive reactions.
-Return only the SINGLE BEST idea you can find. If there's genuinely a second or third strong one, include those too — but don't pad it. One great idea beats three mediocre ones."""
+Return only the SINGLE BEST idea you can find. If there's genuinely a second or third strong one, include those too — but don't pad it. One great idea beats three mediocre ones.
+
+COMPETITOR VALIDATION (critical):
+Before including ANY idea in your output, you MUST validate it:
+1. Use the web_search tool to search for existing apps/tools (e.g. "plant disease identifier app", "[idea] app competitors")
+2. Based on your knowledge AND the search results, list real competitors honestly
+3. Rate the market: OPEN (nothing exists), GROWING (a few early/niche tools), CROWDED (established players)
+4. If competitors exist, what's the EDGE? Why would someone build this differently?
+   - Maybe existing tools are desktop-only and people want mobile
+   - Maybe they're expensive and people want a free/simple version
+   - Maybe they serve a different audience
+   - Maybe they're bloated and people want something focused
+5. REJECT ideas where the market is CROWDED and you can't identify a clear edge
+
+COMPETITOR SCALE CHECK (critical — do NOT skip this):
+If ANY competitor is a household-name app or has millions of users (e.g. Calm, Headspace, Duolingo, Sleep Cycle, Shazam, MyFitnessPal, Strava), the market is CROWDED. Period.
+- Do NOT downgrade to GROWING just because you found a niche angle. Giant apps can add a niche feature in a week.
+- "But no one does X specifically" is NOT an edge when the competitors are massive platforms in the same space. They will simply add X.
+- A valid edge against large competitors requires a fundamentally different delivery model (hardware, real-time data, local network effects) — not just a UI twist or narrower focus.
+- When in doubt, mark CROWDED and reject.
+
+A GROWING market with a clear edge is actually the BEST signal — it means the pain point is validated but nobody's nailed it yet. But GROWING means small/indie competitors, NOT billion-dollar apps that happen to not have one specific feature.
+
+WORKFLOW: scan comments → identify promising pain points → web_search each one → only return ideas that survive validation."""
 
 _MODE_RELAXED = """
 FILTER (relaxed):
@@ -85,6 +111,8 @@ Below are the top ideas from each batch. Pick the SINGLE BEST one overall.
 - Combine clusters with the same or very similar themes
 - Sum up comment_count and video_count for merged clusters
 - Keep the best sample_comments
+- Merge competitor lists — remove duplicates
+- Pick the most accurate market rating
 - Include a second or third only if they're genuinely strong — don't pad
 
 Respond with ONLY valid JSON:
@@ -97,6 +125,9 @@ Respond with ONLY valid JSON:
       "video_count": <total>,
       "potential": "HIGH",
       "app_idea": "One concrete app concept",
+      "competitors": ["existing apps/tools"],
+      "market": "OPEN | GROWING | CROWDED",
+      "edge": "What makes this different",
       "sample_comments": ["3-5 best comments"]
     }
   ]
@@ -109,16 +140,106 @@ BATCH_SIZE = 50
 # Provider abstraction — each returns a raw text response
 # ---------------------------------------------------------------------------
 
+_SEARCH_TOOL = {
+    "name": "web_search",
+    "description": (
+        "Search the web to verify whether an app idea already exists, "
+        "find competitors, and check market saturation. "
+        "Use this BEFORE including any idea in your final output."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search query, e.g. 'plant disease identifier app' or 'receipt splitting app competitors'",
+            }
+        },
+        "required": ["query"],
+    },
+}
+
+
+async def _web_search(query: str) -> str:
+    """Run a web search using DuckDuckGo (no API key needed)."""
+    import urllib.parse
+    import httpx
+
+    url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            text = resp.text
+            # Extract result snippets from DDG HTML
+            results: list[str] = []
+            for block in text.split('class="result__snippet"'):
+                if len(results) >= 5:
+                    break
+                if block.find("</a>") > -1 or block.find("</span>") > -1:
+                    # Grab text between > and <
+                    import re
+                    snippet = re.sub(r"<[^>]+>", "", block[:500]).strip()
+                    if snippet and len(snippet) > 20:
+                        results.append(snippet[:200])
+            return "\n".join(results) if results else "No results found."
+    except Exception as e:
+        return f"Search failed: {e}"
+
+
 async def _call_anthropic(api_key: str, system: str, user_prompt: str) -> str:
     from anthropic import AsyncAnthropic
     client = AsyncAnthropic(api_key=api_key)
+
+    messages = [{"role": "user", "content": user_prompt}]
+
+    # First call — may request tool use
     response = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=4096,
         system=system,
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=messages,
+        tools=[_SEARCH_TOOL],
     )
-    return response.content[0].text
+
+    # Handle tool use loop (max 5 searches per batch)
+    for _ in range(5):
+        if response.stop_reason != "tool_use":
+            break
+
+        # Process all tool calls in the response
+        tool_results = []
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "web_search":
+                logger.info("LLM searching: %s", block.input.get("query", ""))
+                result = await _web_search(block.input["query"])
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                })
+
+        if not tool_results:
+            break
+
+        messages = [
+            *messages,
+            {"role": "assistant", "content": response.content},
+            *[{"role": "user", "content": [tr]} for tr in tool_results],
+        ]
+
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            system=system,
+            messages=messages,
+            tools=[_SEARCH_TOOL],
+        )
+
+    # Extract final text
+    for block in response.content:
+        if hasattr(block, "text"):
+            return block.text
+    return ""
 
 
 async def _call_openai(api_key: str, system: str, user_prompt: str) -> str:
@@ -192,13 +313,68 @@ def build_analysis_prompt(videos: list[Video], comments: list[Comment]) -> str:
 
 
 def _parse_json_response(raw_text: str) -> dict:
-    """Parse LLM response, stripping markdown fences if present."""
-    json_text = raw_text.strip()
-    if json_text.startswith("```"):
-        json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
-    if json_text.endswith("```"):
-        json_text = json_text[:-3]
-    return json.loads(json_text.strip())
+    """Parse LLM response, extracting JSON even when surrounded by extra text."""
+    text = raw_text.strip()
+    if not text:
+        return {"clusters": []}
+
+    # Strip markdown fences
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+
+    if not text:
+        return {"clusters": []}
+
+    # Try direct parse first
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        # Find the first { ... } or [ ... ] block in the text
+        start = -1
+        brace = None
+        for i, ch in enumerate(text):
+            if ch in "{[":
+                start = i
+                brace = "}" if ch == "{" else "]"
+                break
+
+        if start == -1:
+            logger.error("No JSON found in LLM response: %s", text[:200])
+            return {"clusters": []}
+
+        # Walk forward to find the matching closing brace
+        depth = 0
+        end = start
+        for i in range(start, len(text)):
+            if text[i] == brace.replace("}", "{").replace("]", "["):
+                # opening brace of same type
+                pass
+            if text[i] in "{[":
+                depth += 1
+            elif text[i] in "}]":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+
+        try:
+            parsed = json.loads(text[start:end])
+        except json.JSONDecodeError:
+            logger.error("Failed to parse extracted JSON: %s", text[start:end][:200])
+            return {"clusters": []}
+
+    if isinstance(parsed, list):
+        return {"clusters": parsed}
+    if isinstance(parsed, dict) and "clusters" not in parsed:
+        if "theme" in parsed:
+            return {"clusters": [parsed]}
+        return {"clusters": []}
+    if isinstance(parsed, dict):
+        return parsed
+    return {"clusters": []}
 
 
 def _chunk_by_video(
@@ -280,16 +456,26 @@ async def analyze_comments(
         log(f"  Batch {i + 1}/{len(batches)}: {len(batch_comments)} comments from {len(batch_videos)} videos")
         prompt = build_analysis_prompt(batch_videos, batch_comments)
 
-        try:
-            raw_text = await call_fn(api_key, system_prompt, prompt)
-            raw_responses.append(raw_text)
-            parsed = _parse_json_response(raw_text)
-            batch_clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
-            all_clusters.extend(batch_clusters)
-            log(f"  Batch {i + 1}: found {len(batch_clusters)} clusters")
-        except Exception as e:
-            logger.error("Batch %d failed: %s\n%s", i + 1, e, traceback.format_exc())
-            log(f"  Batch {i + 1} failed: {e}")
+        for attempt in range(2):
+            try:
+                raw_text = await call_fn(api_key, system_prompt, prompt)
+                raw_responses.append(raw_text)
+                parsed = _parse_json_response(raw_text)
+                batch_clusters = []
+                for c in parsed["clusters"]:
+                    try:
+                        batch_clusters.append(AnalysisCluster(**c))
+                    except Exception as ce:
+                        logger.debug("Skipping malformed cluster: %s", ce)
+                all_clusters.extend(batch_clusters)
+                log(f"  Batch {i + 1}: found {len(batch_clusters)} clusters")
+                break
+            except Exception as e:
+                if attempt == 0:
+                    logger.debug("Batch %d attempt 1 failed: %s, retrying...", i + 1, e)
+                else:
+                    logger.error("Batch %d failed: %s\nRaw response: %s", i + 1, e, raw_text[:500] if 'raw_text' in dir() else 'N/A')
+                    log(f"  Batch {i + 1} failed: {e}")
 
     if not all_clusters:
         return AnalysisResult(

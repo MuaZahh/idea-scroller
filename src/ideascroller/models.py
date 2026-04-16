@@ -52,7 +52,10 @@ class AnalysisCluster(BaseModel):
     video_count: int
     potential: str
     app_idea: str
-    sample_comments: list[str]
+    competitors: list[str] = []
+    market: str = "OPEN"
+    edge: str = ""
+    sample_comments: list[str] = []
 
 
 class AnalysisResult(BaseModel):

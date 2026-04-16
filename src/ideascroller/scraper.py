@@ -5,9 +5,11 @@ import logging
 import re
 from pathlib import Path
 from typing import Callable, Optional
+from urllib.parse import quote
 
 from playwright.async_api import Page, Response, async_playwright
 
+from ideascroller.captcha import is_captcha_present, solve_captcha
 from ideascroller.models import Comment, Video
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ class Scraper:
         comment_threshold: int = 300,
         max_comments_per_video: int = 30,
         max_videos: int = 0,
+        niche: str = "",
         on_log: Optional[Callable[[str], None]] = None,
         on_stats_update: Optional[Callable[[int, int, int], None]] = None,
     ) -> None:
@@ -44,6 +47,7 @@ class Scraper:
         self._threshold = comment_threshold
         self._max_comments = max_comments_per_video
         self._max_videos = max_videos  # 0 = unlimited
+        self._niche = niche.strip()
         self._on_log = on_log or (lambda msg: None)
         self._on_stats_update = on_stats_update or (lambda a, b, c: None)
         self._stop_event = asyncio.Event()
@@ -78,6 +82,129 @@ class Scraper:
         logger.info(message)
         self._on_log(message)
 
+    async def _check_captcha(self, page: Page) -> None:
+        """Detect and solve CAPTCHA if present, pausing the scroll loop."""
+        if await is_captcha_present(page):
+            self._log("CAPTCHA detected — solving...")
+            solved = await solve_captcha(page, on_log=self._log)
+            if not solved:
+                self._log("CAPTCHA unsolved — stopping.")
+                self._stop_event.set()
+            return
+
+        # Probe for unknown CAPTCHA overlays we might be missing
+        probe = await page.evaluate("""() => {
+            // Check for any element with "captcha" or "verify" in class/id
+            const all = document.querySelectorAll('*');
+            const hits = [];
+            for (const el of all) {
+                const id = el.id || '';
+                const cls = el.className || '';
+                const text = (typeof cls === 'string' ? cls : '') + ' ' + id;
+                if (/captcha|verify.*puzzle|verify.*slide|secsdk/i.test(text)) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        hits.push({
+                            tag: el.tagName,
+                            id: id.substring(0, 60),
+                            cls: (typeof cls === 'string' ? cls : '').substring(0, 80),
+                            w: Math.round(rect.width),
+                            h: Math.round(rect.height),
+                        });
+                    }
+                }
+            }
+            // Also check for iframes
+            const iframes = document.querySelectorAll('iframe');
+            for (const f of iframes) {
+                const src = f.src || '';
+                if (/captcha|verify|challenge/i.test(src)) {
+                    hits.push({ tag: 'IFRAME', id: f.id, cls: f.className, src: src.substring(0, 100) });
+                }
+            }
+            // Also check for "Drag the slider" text
+            const body = document.body.innerText;
+            if (/drag.*slider|slide.*puzzle/i.test(body)) {
+                hits.push({ tag: 'TEXT_MATCH', id: 'drag-slider-text-found' });
+            }
+            return hits.length > 0 ? hits : null;
+        }""")
+
+        if probe:
+            self._log(f"CAPTCHA probe found {len(probe)} elements:")
+            for hit in probe:
+                self._log(f"  {hit}")
+
+            # Deep probe — find images and interactive elements inside the captcha
+            deep = await page.evaluate("""() => {
+                const container = document.querySelector('.captcha-verify-container')
+                    || document.querySelector('#captcha-verify-container-main-page');
+                if (!container) return null;
+                const results = { images: [], buttons: [], inputs: [], canvases: [], divs: [] };
+                // All images
+                for (const img of container.querySelectorAll('img')) {
+                    results.images.push({
+                        src: (img.src || '').substring(0, 120),
+                        cls: (img.className || '').substring(0, 80),
+                        id: img.id || '',
+                        w: img.naturalWidth, h: img.naturalHeight,
+                        dw: Math.round(img.getBoundingClientRect().width),
+                    });
+                }
+                // All canvases
+                for (const c of container.querySelectorAll('canvas')) {
+                    results.canvases.push({
+                        w: c.width, h: c.height, id: c.id, cls: c.className,
+                    });
+                }
+                // All divs with background-image
+                for (const d of container.querySelectorAll('div')) {
+                    const bg = getComputedStyle(d).backgroundImage;
+                    if (bg && bg !== 'none') {
+                        results.divs.push({
+                            bg: bg.substring(0, 120),
+                            cls: (d.className || '').substring(0, 60),
+                            id: d.id || '',
+                        });
+                    }
+                }
+                // All interactive elements (buttons, inputs, sliders)
+                for (const b of container.querySelectorAll('button, input, [role="slider"], [draggable]')) {
+                    const r = b.getBoundingClientRect();
+                    results.buttons.push({
+                        tag: b.tagName, id: b.id || '',
+                        cls: (b.className || '').substring(0, 60),
+                        w: Math.round(r.width), h: Math.round(r.height),
+                        type: b.type || '', role: b.getAttribute('role') || '',
+                    });
+                }
+                return results;
+            }""")
+
+            if deep:
+                if deep.get("images"):
+                    self._log(f"  Images ({len(deep['images'])}):")
+                    for img in deep["images"]:
+                        self._log(f"    {img}")
+                if deep.get("canvases"):
+                    self._log(f"  Canvases ({len(deep['canvases'])}):")
+                    for c in deep["canvases"]:
+                        self._log(f"    {c}")
+                if deep.get("divs"):
+                    self._log(f"  BG-image divs ({len(deep['divs'])}):")
+                    for d in deep["divs"]:
+                        self._log(f"    {d}")
+                if deep.get("buttons"):
+                    self._log(f"  Interactive ({len(deep['buttons'])}):")
+                    for b in deep["buttons"]:
+                        self._log(f"    {b}")
+
+            # Try to solve since we found captcha elements
+            solved = await solve_captcha(page, on_log=self._log)
+            if not solved:
+                self._log("CAPTCHA unsolved — stopping.")
+                self._stop_event.set()
+
     def _update_stats(self) -> None:
         self._on_stats_update(
             self._videos_scanned, self._videos_scraped, len(self._comments)
@@ -95,9 +222,6 @@ class Scraper:
                 items = body.get("itemList", [])
                 if items:
                     self._intercepted_video_items.extend(items)
-                    self._log(
-                        f"Intercepted {len(items)} video items (total: {len(self._intercepted_video_items)})"
-                    )
             elif "/api/comment/list/" in url:
                 # Extract aweme_id from URL to key comments by video
                 aweme_match = re.search(r"aweme_id=(\d+)", url)
@@ -109,10 +233,6 @@ class Scraper:
                 if comments_data:
                     existing = self._comments_by_video.get(aweme_id, [])
                     self._comments_by_video[aweme_id] = [*existing, *comments_data]
-                    self._log(
-                        f"Got {len(comments_data)} comments for video {aweme_id} "
-                        f"(total: {len(self._comments_by_video[aweme_id])})"
-                    )
         except Exception as e:
             logger.debug("Failed to parse response %s: %s", url[:80], e)
 
@@ -183,9 +303,6 @@ class Scraper:
 
             if items:
                 self._intercepted_video_items.extend(items)
-                self._log(f"Extracted {len(items)} initial video items from page")
-            else:
-                self._log("No initial video items found in page data (first few videos may lack IDs)")
         except Exception as e:
             logger.debug("Failed to extract initial items: %s", e)
 
@@ -292,8 +409,17 @@ class Scraper:
             page = context.pages[0] if context.pages else await context.new_page()
             page.on("response", self._handle_response)
 
-            self._log("Navigating to TikTok FYP...")
-            await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
+            # Build target URL based on niche
+            if self._niche:
+                # Strip leading # if user typed a hashtag
+                tag = self._niche.lstrip("#")
+                target_url = f"https://www.tiktok.com/tag/{quote(tag)}"
+                self._log(f"Navigating to #{tag}...")
+            else:
+                target_url = "https://www.tiktok.com/foryou"
+                self._log("Navigating to TikTok FYP...")
+
+            await page.goto(target_url, wait_until="networkidle")
             await asyncio.sleep(3)
 
             # If not logged in, wait for user to log in manually
@@ -304,8 +430,8 @@ class Scraper:
                 if self._stop_event.is_set():
                     await context.close()
                     return
-                self._log("Logged in! Navigating to FYP...")
-                await page.goto("https://www.tiktok.com/foryou", wait_until="networkidle")
+                self._log("Logged in!")
+                await page.goto(target_url, wait_until="networkidle")
                 await asyncio.sleep(3)
 
             # Extract initial video items from SSR data
@@ -313,7 +439,6 @@ class Scraper:
 
             # Open comment panel ONCE — it stays open and auto-updates
             # as we scroll through videos
-            self._log("Opening comment panel...")
             try:
                 await page.evaluate("""() => {
                     const icon = document.querySelector('span[data-e2e="comment-icon"]');
@@ -323,14 +448,21 @@ class Scraper:
                     }
                 }""")
                 await asyncio.sleep(2)
-                self._log("Comment panel opened — it will stay open during scrolling")
             except Exception:
-                self._log("Could not open comment panel — comments will be collected via XHR only")
+                logger.debug("Could not open comment panel")
 
-            self._log("Starting scroll loop...")
+            # Check for CAPTCHA right after page load
+            await self._check_captcha(page)
+
+            self._log("Scrolling...")
             last_article_id = ""
 
             while not self._stop_event.is_set():
+                # Check for CAPTCHA before each video
+                await self._check_captcha(page)
+                if self._stop_event.is_set():
+                    break
+
                 # 1. READ the video that is currently on screen
                 video_info = await self._read_visible_video(page)
                 article_id = video_info.get("articleId", "")
@@ -353,11 +485,6 @@ class Scraper:
                 if not video_id:
                     video_id = self._extract_video_id(page.url)
 
-                id_str = video_id or "no ID"
-                self._log(
-                    f"Video #{self._videos_scanned} @{author}: "
-                    f"{comment_count} comments ({id_str})"
-                )
                 self._update_stats()
 
                 # 3. CHECK — should we scrape this video?
@@ -368,8 +495,10 @@ class Scraper:
                 )
 
                 if not should_scrape:
-                    if comment_count >= self._threshold and not video_id:
-                        self._log(f"No video ID for @{author}, skipping")
+                    self._log(
+                        f"#{self._videos_scanned} @{author} — "
+                        f"{comment_count} comments, skipped"
+                    )
                     await page.keyboard.press("ArrowDown")
                     await asyncio.sleep(1.5)
                     continue
@@ -386,7 +515,6 @@ class Scraper:
                 self._videos.append(video)
                 self._videos_scraped += 1
 
-                self._log(f">>> Collecting comments for @{author}...")
                 await self._collect_comments(page, video_id)
                 self._update_stats()
 
@@ -399,7 +527,7 @@ class Scraper:
                 await page.keyboard.press("ArrowDown")
                 await asyncio.sleep(1.5)
 
-            self._log("Scroll loop stopped.")
+            self._log("Done scrolling.")
             try:
                 await context.close()
             except Exception:
@@ -477,4 +605,11 @@ class Scraper:
                 logger.debug("Failed to parse comment: %s", e)
 
         collected = min(len(raw_comments), max_comments)
-        self._log(f"Collected {collected} comments")
+        # Find author from the video we just scraped
+        video_author = next(
+            (v.author for v in self._videos if v.id == video_id), "unknown"
+        )
+        self._log(
+            f"#{self._videos_scanned} @{video_author} — "
+            f"{collected} comments collected"
+        )
