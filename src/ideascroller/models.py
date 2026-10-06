@@ -33,6 +33,10 @@ class Video(BaseModel):
     description: str
     comment_count: int
     url: str
+    view_count: int = 0
+    like_count: int = 0
+    share_count: int = 0
+    save_count: int = 0
 
 
 class Comment(BaseModel):
@@ -43,6 +47,15 @@ class Comment(BaseModel):
     likes: int = 0
     reply_count: int = 0
     created_at: Optional[datetime.datetime] = None
+
+
+class ValidationSignals(BaseModel):
+    """Market-signal data attached to a surfaced idea by the validators."""
+
+    trustmrr: Optional[dict] = None  # TrustMRRSignal serialized
+    reddit: Optional[dict] = None  # RedditSignal serialized
+    keyword: Optional[dict] = None  # KeywordSignal serialized
+    virality: Optional[dict] = None  # session-level view/like aggregates
 
 
 class AnalysisCluster(BaseModel):
@@ -56,6 +69,7 @@ class AnalysisCluster(BaseModel):
     market: str = "OPEN"
     edge: str = ""
     sample_comments: list[str] = []
+    validation: Optional[ValidationSignals] = None
 
 
 class AnalysisResult(BaseModel):

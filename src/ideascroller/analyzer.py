@@ -5,7 +5,9 @@ import logging
 import traceback
 from typing import Optional
 
+from ideascroller.adaptive_analyzer import validate_clusters_adaptive
 from ideascroller.models import AnalysisCluster, AnalysisResult, Comment, Video
+from ideascroller.validators.orchestrator import enrich_clusters
 
 logger = logging.getLogger(__name__)
 
@@ -414,11 +416,17 @@ async def analyze_comments(
     comments: list[Comment],
     on_log: Optional[callable] = None,
     mode: str = "balanced",
+    *,
+    enable_validators: bool = True,
+    validator_mode: str = "adaptive",  # "adaptive" (Sonnet 4.6 tool_use) | "rigid" (fixed fan-out)
 ) -> AnalysisResult:
     """Analyze comments using whichever LLM provider has a key set.
 
     mode: "relaxed", "balanced", or "strict" — controls how critically ideas are filtered.
-    api_keys: dict with possible keys ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY
+    api_keys: dict with possible keys ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+        and optional TRUSTMRR_API_KEY for competitor-revenue validation.
+    enable_validators: when True, attach market-validation signals (TrustMRR / Reddit /
+        Google Trends / session virality) to every cluster after analysis.
     """
     if not comments:
         return AnalysisResult(
@@ -477,17 +485,42 @@ async def analyze_comments(
                     logger.error("Batch %d failed: %s\nRaw response: %s", i + 1, e, raw_text[:500] if 'raw_text' in dir() else 'N/A')
                     log(f"  Batch {i + 1} failed: {e}")
 
+    async def _finalize(final_clusters: list[AnalysisCluster], raw: str) -> AnalysisResult:
+        if not enable_validators:
+            return AnalysisResult(session_id=session_id, clusters=final_clusters, raw_response=raw)
+
+        # Adaptive validator (Sonnet 4.6 tool_use) is the primary path. Falls back
+        # to the rigid orchestrator if no ANTHROPIC_API_KEY (required for adaptive)
+        # or if validator_mode="rigid" is explicitly requested.
+        anthropic_key = api_keys.get("ANTHROPIC_API_KEY")
+        if anthropic_key and validator_mode == "adaptive":
+            log("Running adaptive validator (Sonnet 4.6 with tool_use)...")
+            try:
+                enriched, traces = await validate_clusters_adaptive(
+                    anthropic_key, final_clusters, videos, log=log,
+                )
+                log(f"Adaptive validation complete · avg_turns={sum(t.turns for t in traces)/max(len(traces),1):.1f}")
+                return AnalysisResult(session_id=session_id, clusters=enriched, raw_response=raw)
+            except Exception as exc:
+                logger.exception("Adaptive validator failed, falling back to rigid")
+                log(f"Adaptive validator failed ({exc}) — falling back to rigid validators")
+
+        enriched = await enrich_clusters(
+            final_clusters,
+            videos,
+            trustmrr_api_key=api_keys.get("TRUSTMRR_API_KEY") or None,
+            enabled=enable_validators,
+            log=log,
+        )
+        return AnalysisResult(session_id=session_id, clusters=enriched, raw_response=raw)
+
     if not all_clusters:
         return AnalysisResult(
             session_id=session_id, clusters=[], raw_response="All batches failed"
         )
 
     if len(batches) == 1:
-        return AnalysisResult(
-            session_id=session_id,
-            clusters=all_clusters,
-            raw_response=raw_responses[0] if raw_responses else "",
-        )
+        return await _finalize(all_clusters, raw_responses[0] if raw_responses else "")
 
     # Multiple batches — merge
     log(f"Merging {len(all_clusters)} clusters from {len(batches)} batches...")
@@ -502,17 +535,8 @@ async def analyze_comments(
         parsed = _parse_json_response(merge_raw)
         merged_clusters = [AnalysisCluster(**c) for c in parsed["clusters"]]
         log(f"Merged into {len(merged_clusters)} final clusters")
-
-        return AnalysisResult(
-            session_id=session_id,
-            clusters=merged_clusters,
-            raw_response=merge_raw,
-        )
+        return await _finalize(merged_clusters, merge_raw)
     except Exception as e:
         logger.error("Merge failed: %s", e)
         log(f"Merge failed, returning unmerged clusters: {e}")
-        return AnalysisResult(
-            session_id=session_id,
-            clusters=all_clusters,
-            raw_response="\n---\n".join(raw_responses),
-        )
+        return await _finalize(all_clusters, "\n---\n".join(raw_responses))

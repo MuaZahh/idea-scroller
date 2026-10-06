@@ -1,0 +1,884 @@
+{
+  "cn.danatech.xingseus": {
+    "title": "PictureThis - Plant Identifier",
+    "score": 4.583889,
+    "installs": "100,000,000+",
+    "query": "plant identifier",
+    "appId": "cn.danatech.xingseus"
+  },
+  "org.plantnet": {
+    "title": "PlantNet Plant Identification",
+    "score": 4.5158687,
+    "installs": "50,000,000+",
+    "query": "plant identifier",
+    "appId": "org.plantnet"
+  },
+  "com.floraincognita.app.floraincognita": {
+    "title": "Flora Incognita",
+    "score": 4.8125,
+    "installs": "10,000,000+",
+    "query": "plant identifier",
+    "appId": "com.floraincognita.app.floraincognita"
+  },
+  "plant.identification.flower.tree.leaf.identifier.identify.cat.dog.breed.nature": {
+    "title": "Plantum - Plant Identifier",
+    "score": 4.3763905,
+    "installs": "10,000,000+",
+    "query": "plant identifier",
+    "appId": "plant.identification.flower.tree.leaf.identifier.identify.cat.dog.breed.nature"
+  },
+  "com.conceptivapps.blossom": {
+    "title": "Blossom - Plant Identifier",
+    "score": 4.415241,
+    "installs": "10,000,000+",
+    "query": "plant identifier",
+    "appId": "com.conceptivapps.blossom"
+  },
+  "null": {
+    "title": "Merlin Bird ID by Cornell Lab",
+    "score": 4.9061084,
+    "installs": "10,000,000+",
+    "query": "bird identifier",
+    "appId": null
+  },
+  "com.ai.bird_identifier": {
+    "title": "Bird Identifier Sound Call ID",
+    "score": 4.597938,
+    "installs": "10,000+",
+    "query": "bird identifier",
+    "appId": "com.ai.bird_identifier"
+  },
+  "de.tu_chemnitz.mi.kahst.birdnet": {
+    "title": "BirdNET",
+    "score": 3.9745224,
+    "installs": "10,000,000+",
+    "query": "bird identifier",
+    "appId": "de.tu_chemnitz.mi.kahst.birdnet"
+  },
+  "com.audubon.mobile.android": {
+    "title": "Audubon Bird Guide",
+    "score": 4.2288404,
+    "installs": "1,000,000+",
+    "query": "bird identifier",
+    "appId": "com.audubon.mobile.android"
+  },
+  "edu.cornell.birds.ebird": {
+    "title": "eBird by Cornell Lab",
+    "score": 3.952381,
+    "installs": "1,000,000+",
+    "query": "bird identifier",
+    "appId": "edu.cornell.birds.ebird"
+  },
+  "com.mushroom.shroomify": {
+    "title": "Shroomify - USA Mushroom ID",
+    "score": 4.6208177,
+    "installs": "1,000,000+",
+    "query": "mushroom identifier",
+    "appId": "com.mushroom.shroomify"
+  },
+  "com.codeview.mushroomfinder": {
+    "title": "Mushroom Finder:Mushroom Spots",
+    "score": 3.7222223,
+    "installs": "10,000+",
+    "query": "mushroom identifier",
+    "appId": "com.codeview.mushroomfinder"
+  },
+  "com.glority.picturemushroom": {
+    "title": "Picture Mushroom - Mushroom ID",
+    "score": 4.1755104,
+    "installs": "5,000,000+",
+    "query": "mushroom identifier",
+    "appId": "com.glority.picturemushroom"
+  },
+  "com.shroomid": {
+    "title": "ShroomID - Identify Mushrooms!",
+    "score": 3.93,
+    "installs": "1,000,000+",
+    "query": "mushroom identifier",
+    "appId": "com.shroomid"
+  },
+  "com.ai.mushroom_identifier": {
+    "title": "Mushroom Identifier - Fungi ID",
+    "score": 4.395349,
+    "installs": "50,000+",
+    "query": "mushroom identifier",
+    "appId": "com.ai.mushroom_identifier"
+  },
+  "com.glority.pictureinsect": {
+    "title": "Picture Insect: Bug Identifier",
+    "score": 4.303651,
+    "installs": "10,000,000+",
+    "query": "insect identifier",
+    "appId": "com.glority.pictureinsect"
+  },
+  "com.ai.bug_insect_identifier": {
+    "title": "AI Insect & Bug Identifier App",
+    "score": 4.69,
+    "installs": "100,000+",
+    "query": "insect identifier",
+    "appId": "com.ai.bug_insect_identifier"
+  },
+  "com.insectium": {
+    "title": "Insect Identifier - Insectium",
+    "score": 4.3267326,
+    "installs": "10,000+",
+    "query": "insect identifier",
+    "appId": "com.insectium"
+  },
+  "bug.identifier.insect.identification.spider.pest": {
+    "title": "Bug ID - Insect Identifier",
+    "score": 3.4653466,
+    "installs": "100,000+",
+    "query": "insect identifier",
+    "appId": "bug.identifier.insect.identification.spider.pest"
+  },
+  "com.insect.trackzio": {
+    "title": "Insecto AI: Bug Identifier",
+    "score": 3.142857,
+    "installs": "5,000+",
+    "query": "insect identifier",
+    "appId": "com.insect.trackzio"
+  },
+  "rock.crystal.stone.gem.mineral.identifier.geology.rocks.slsolutions.rockid": {
+    "title": "Rock & Crystal Identifier App",
+    "score": 4.8343196,
+    "installs": "500,000+",
+    "query": "rock identifier",
+    "appId": "rock.crystal.stone.gem.mineral.identifier.geology.rocks.slsolutions.rockid"
+  },
+  "rock.identifier.stone.gem.crystal.mineral": {
+    "title": "Rock ID - Stone Identifier",
+    "score": 4.3773584,
+    "installs": "1,000,000+",
+    "query": "rock identifier",
+    "appId": "rock.identifier.stone.gem.crystal.mineral"
+  },
+  "com.rockidentifier.stoneid.identifystones": {
+    "title": "Stone Identifier: Rock Crystal",
+    "score": 3.8415842,
+    "installs": "500,000+",
+    "query": "rock identifier",
+    "appId": "com.rockidentifier.stoneid.identifystones"
+  },
+  "com.ai.rock_stone_identifier": {
+    "title": "Rock Identifier: Stone Scanner",
+    "score": 4.52,
+    "installs": "100,000+",
+    "query": "rock identifier",
+    "appId": "com.ai.rock_stone_identifier"
+  },
+  "com.scaleup.plantid": {
+    "title": "Plant App - Plant Identifier",
+    "score": 4.289115,
+    "installs": "10,000,000+",
+    "query": "flower identifier",
+    "appId": "com.scaleup.plantid"
+  },
+  "com.siwalusoftware.dogscanner": {
+    "title": "Dog Scanner: Breed Recognition",
+    "score": 4.3209,
+    "installs": "10,000,000+",
+    "query": "dog breed identifier",
+    "appId": "com.siwalusoftware.dogscanner"
+  },
+  "com.DogIdentifier.DogSpot": {
+    "title": "Dog Identifier - Scan with AI",
+    "score": 4.1764708,
+    "installs": "5,000+",
+    "query": "dog breed identifier",
+    "appId": "com.DogIdentifier.DogSpot"
+  },
+  "com.identifierpro.dog": {
+    "title": "Dog Breed Identifier & Scanner",
+    "score": 0,
+    "installs": "5,000+",
+    "query": "dog breed identifier",
+    "appId": "com.identifierpro.dog"
+  },
+  "com.famoconnect.dog.breed.identifier.scanner.mixed.breeds": {
+    "title": "Dog Breed Identifier With AI",
+    "score": 3.6831684,
+    "installs": "100,000+",
+    "query": "dog breed identifier",
+    "appId": "com.famoconnect.dog.breed.identifier.scanner.mixed.breeds"
+  },
+  "com.kitglobal.petsydna.prod": {
+    "title": "PetsyDNA: Dog Breed Finder",
+    "score": 0,
+    "installs": "1,000+",
+    "query": "dog breed identifier",
+    "appId": "com.kitglobal.petsydna.prod"
+  },
+  "com.glority.picturefish": {
+    "title": "Picture Fish - Fish Identifier",
+    "score": 4.19,
+    "installs": "1,000,000+",
+    "query": "fish identifier",
+    "appId": "com.glority.picturefish"
+  },
+  "app.pixoby.fishby": {
+    "title": "Fish Identifier - Fishby",
+    "score": 4.24,
+    "installs": "50,000+",
+    "query": "fish identifier",
+    "appId": "app.pixoby.fishby"
+  },
+  "com.jg.fishidentifier": {
+    "title": "Fish identifier",
+    "score": 2.047619,
+    "installs": "100,000+",
+    "query": "fish identifier",
+    "appId": "com.jg.fishidentifier"
+  },
+  "com.fish_identifier.fish.identifier": {
+    "title": "Fish Identifier: AI Scanner",
+    "score": 4.3333335,
+    "installs": "10,000+",
+    "query": "fish identifier",
+    "appId": "com.fish_identifier.fish.identifier"
+  },
+  "com.seabook.app": {
+    "title": "Fish Identifier\u318dScuba Dive Log",
+    "score": 3.75,
+    "installs": "100,000+",
+    "query": "fish identifier",
+    "appId": "com.seabook.app"
+  },
+  "com.noctuasoftware.stellarium_free": {
+    "title": "Stellarium Mobile - Star Map",
+    "score": 4.79558,
+    "installs": "50,000,000+",
+    "query": "star identifier",
+    "appId": "com.noctuasoftware.stellarium_free"
+  },
+  "com.vitotechnology.sky.tonight.map.star.walk": {
+    "title": "Sky Tonight - Star Gazer Guide",
+    "score": 4.6445293,
+    "installs": "10,000,000+",
+    "query": "star identifier",
+    "appId": "com.vitotechnology.sky.tonight.map.star.walk"
+  },
+  "com.vitotechnology.StarWalk2Free": {
+    "title": "Star Walk 2 Plus: Sky Map View",
+    "score": 4.562184,
+    "installs": "50,000,000+",
+    "query": "star identifier",
+    "appId": "com.vitotechnology.StarWalk2Free"
+  },
+  "com.t11.skyviewfree": {
+    "title": "SkyView\u00ae Lite",
+    "score": 4.306517,
+    "installs": "10,000,000+",
+    "query": "star identifier",
+    "appId": "com.t11.skyviewfree"
+  },
+  "com.youvendo.international_space_registry": {
+    "title": "Universe Star Finder 3D",
+    "score": 4.49,
+    "installs": "500,000+",
+    "query": "star identifier",
+    "appId": "com.youvendo.international_space_registry"
+  },
+  "com.softonium.findmyfont": {
+    "title": "Find my Font",
+    "score": 4.02,
+    "installs": "1,000,000+",
+    "query": "font identifier",
+    "appId": "com.softonium.findmyfont"
+  },
+  "com.monotype.whatthefont": {
+    "title": "WhatTheFont",
+    "score": 2.1,
+    "installs": "5,000,000+",
+    "query": "font identifier",
+    "appId": "com.monotype.whatthefont"
+  },
+  "com.eastfrisia.fontidentifier": {
+    "title": "Font Finder: AI Identifier",
+    "score": 0,
+    "installs": "1,000+",
+    "query": "font identifier",
+    "appId": "com.eastfrisia.fontidentifier"
+  },
+  "xyz.toolboxforweb.font.detector.from.image": {
+    "title": "Font Detect from Image",
+    "score": 0,
+    "installs": "500+",
+    "query": "font identifier",
+    "appId": "xyz.toolboxforweb.font.detector.from.image"
+  },
+  "info.camposha.what_font": {
+    "title": "What Font: Font Detector",
+    "score": 0,
+    "installs": "5,000+",
+    "query": "font identifier",
+    "appId": "info.camposha.what_font"
+  },
+  "com.shazam.android": {
+    "title": "Shazam: Find Music & Concerts",
+    "score": 4.837603,
+    "installs": "1,000,000,000+",
+    "query": "song identifier",
+    "appId": "com.shazam.android"
+  },
+  "com.music.finder.app": {
+    "title": "Song Finder: Music Identifier",
+    "score": 4.3069305,
+    "installs": "100,000+",
+    "query": "song identifier",
+    "appId": "com.music.finder.app"
+  },
+  "com.melodis.midomiMusicIdentifier.freemium": {
+    "title": "SoundHound - Music Discovery",
+    "score": 3.7762432,
+    "installs": "100,000,000+",
+    "query": "song identifier",
+    "appId": "com.melodis.midomiMusicIdentifier.freemium"
+  },
+  "com.light.music.recognition": {
+    "title": "Music Recognition - Find Songs",
+    "score": 4.43074,
+    "installs": "10,000,000+",
+    "query": "song identifier",
+    "appId": "com.light.music.recognition"
+  },
+  "com.songfinder.recognizer": {
+    "title": "Song Finder",
+    "score": 4.0495048,
+    "installs": "1,000,000+",
+    "query": "song identifier",
+    "appId": "com.songfinder.recognizer"
+  },
+  "com.wonbo.stamp.identifier.identify.value": {
+    "title": "StampSnap - Stamp Identifier",
+    "score": 4.65,
+    "installs": "100,000+",
+    "query": "stamp identifier",
+    "appId": "com.wonbo.stamp.identifier.identify.value"
+  },
+  "com.ai.stamp_identifier": {
+    "title": "Stamp Identifier-Stamp Scanner",
+    "score": 4.43,
+    "installs": "50,000+",
+    "query": "stamp identifier",
+    "appId": "com.ai.stamp_identifier"
+  },
+  "com.colnect.identify.stamp": {
+    "title": "Stamp Identifier",
+    "score": 3.47,
+    "installs": "500,000+",
+    "query": "stamp identifier",
+    "appId": "com.colnect.identify.stamp"
+  },
+  "com.stamp.ai.identifier": {
+    "title": "Stamp Identifier",
+    "score": 4.40678,
+    "installs": "5,000+",
+    "query": "stamp identifier",
+    "appId": "com.stamp.ai.identifier"
+  },
+  "com.ai.stamp.identifier.value": {
+    "title": "Stamp Value Stamp Identifier",
+    "score": 4.4840527,
+    "installs": "500,000+",
+    "query": "stamp identifier",
+    "appId": "com.ai.stamp.identifier.value"
+  },
+  "com.coinidentifyer.ai": {
+    "title": "CoinSnap - Coin Identifier",
+    "score": 4.4775305,
+    "installs": "10,000,000+",
+    "query": "coin identifier",
+    "appId": "com.coinidentifyer.ai"
+  },
+  "com.revoke.coin.identify.checker": {
+    "title": "AI Coin Identifier: Value Scan",
+    "score": 4.5673075,
+    "installs": "500,000+",
+    "query": "coin identifier",
+    "appId": "com.revoke.coin.identify.checker"
+  },
+  "com.coinvaluechecker.myapp": {
+    "title": "Coin Value Checker - CoinHix",
+    "score": 4.5950413,
+    "installs": "100,000+",
+    "query": "coin identifier",
+    "appId": "com.coinvaluechecker.myapp"
+  },
+  "com.weipaitang.coin": {
+    "title": "HeritCoin: AI Coin Identifier",
+    "score": 4.715537,
+    "installs": "5,000,000+",
+    "query": "coin identifier",
+    "appId": "com.weipaitang.coin"
+  },
+  "com.coinin.app": {
+    "title": "CoinIn \u2013 Coin Scan Identifier",
+    "score": 4.4774585,
+    "installs": "1,000,000+",
+    "query": "coin identifier",
+    "appId": "com.coinin.app"
+  },
+  "com.labs326.antique": {
+    "title": "Antique Identifier Zophi",
+    "score": 4.6711,
+    "installs": "100,000+",
+    "query": "antique identifier",
+    "appId": "com.labs326.antique"
+  },
+  "com.antiqueworth.identifier": {
+    "title": "AntiqSnap: Antique Identifier",
+    "score": 4.6754284,
+    "installs": "500,000+",
+    "query": "antique identifier",
+    "appId": "com.antiqueworth.identifier"
+  },
+  "com.dionysus_labs.antiqueid": {
+    "title": "Curio - Antique Identifier",
+    "score": 4.5733333,
+    "installs": "100,000+",
+    "query": "antique identifier",
+    "appId": "com.dionysus_labs.antiqueid"
+  },
+  "com.toolcrafters.antique_identifier": {
+    "title": "Antique Identifier: AI Antique",
+    "score": 4.4950495,
+    "installs": "50,000+",
+    "query": "antique identifier",
+    "appId": "com.toolcrafters.antique_identifier"
+  },
+  "antique.snap.identifier.scan.appraisal": {
+    "title": "The Old: Antique Identifier",
+    "score": 4.72,
+    "installs": "50,000+",
+    "query": "antique identifier",
+    "appId": "antique.snap.identifier.scan.appraisal"
+  },
+  "com.aidermatologist": {
+    "title": "AI Dermatologist: Skin Scanner",
+    "score": 4.1865077,
+    "installs": "1,000,000+",
+    "query": "skin condition scanner",
+    "appId": "com.aidermatologist"
+  },
+  "bsmith.rash": {
+    "title": "Rash ID: AI Skin Scanner",
+    "score": 4.3814435,
+    "installs": "50,000+",
+    "query": "skin condition scanner",
+    "appId": "bsmith.rash"
+  },
+  "com.skinive.App": {
+    "title": "AI Skin Scanner & Mole checker",
+    "score": 4,
+    "installs": "1,000,000+",
+    "query": "skin condition scanner",
+    "appId": "com.skinive.App"
+  },
+  "com.phonegap.whichderm": {
+    "title": "Model Dermatol \u2013 Skin Disease",
+    "score": 4.68,
+    "installs": "1,000,000+",
+    "query": "skin condition scanner",
+    "appId": "com.phonegap.whichderm"
+  },
+  "health.medicalscanner.app": {
+    "title": "Medic Scanner - skin analyze",
+    "score": 3.6966293,
+    "installs": "500,000+",
+    "query": "skin condition scanner",
+    "appId": "health.medicalscanner.app"
+  },
+  "com.viraldevelopment.calai": {
+    "title": "Cal AI - Food Calorie Tracker",
+    "score": 4.6786985,
+    "installs": "5,000,000+",
+    "query": "food calorie scanner",
+    "appId": "com.viraldevelopment.calai"
+  },
+  "com.fourtechnologies.mynetdiary.ad": {
+    "title": "Calorie Counter - MyNetDiary",
+    "score": 4.698181,
+    "installs": "10,000,000+",
+    "query": "food calorie scanner",
+    "appId": "com.fourtechnologies.mynetdiary.ad"
+  },
+  "com.myfitnesspal.android": {
+    "title": "MyFitnessPal: Calorie Counter",
+    "score": 4.425852,
+    "installs": "100,000,000+",
+    "query": "food calorie scanner",
+    "appId": "com.myfitnesspal.android"
+  },
+  "com.yazio.android": {
+    "title": "Yazio: AI Calorie Tracker",
+    "score": 4.4836793,
+    "installs": "100,000,000+",
+    "query": "food calorie scanner",
+    "appId": "com.yazio.android"
+  },
+  "com.pookies.food.ai": {
+    "title": "BitePal: AI Calorie Counter",
+    "score": 4.627037,
+    "installs": "5,000,000+",
+    "query": "food calorie scanner",
+    "appId": "com.pookies.food.ai"
+  },
+  "plant.identification.snap": {
+    "title": "Plant Identifier: LeafSnap",
+    "score": 4.2622643,
+    "installs": "10,000,000+",
+    "query": "leaf identifier",
+    "appId": "plant.identification.snap"
+  },
+  "com.fws.plantsnap2": {
+    "title": "PlantSnap: Plant Identifier",
+    "score": 3.684511,
+    "installs": "10,000,000+",
+    "query": "leaf identifier",
+    "appId": "com.fws.plantsnap2"
+  },
+  "com.snake.identifier.ai": {
+    "title": "Snake Identifier",
+    "score": 3.5333333,
+    "installs": "5,000+",
+    "query": "snake identifier",
+    "appId": "com.snake.identifier.ai"
+  },
+  "com.ursa.snakeid": {
+    "title": "Snake identifier",
+    "score": 3.3333333,
+    "installs": "50,000+",
+    "query": "snake identifier",
+    "appId": "com.ursa.snakeid"
+  },
+  "com.ezebeck.SnakeID": {
+    "title": "Snake ID - reptile identifier",
+    "score": 3.212766,
+    "installs": "10,000+",
+    "query": "snake identifier",
+    "appId": "com.ezebeck.SnakeID"
+  },
+  "com.snakefy.mobile": {
+    "title": "Snake Identifier: Snakefy",
+    "score": 5,
+    "installs": "1,000+",
+    "query": "snake identifier",
+    "appId": "com.snakefy.mobile"
+  },
+  "com.mdtech.snake.identifier.android": {
+    "title": "Snake Identifier",
+    "score": 0,
+    "installs": "500+",
+    "query": "snake identifier",
+    "appId": "com.mdtech.snake.identifier.android"
+  },
+  "com.vlmt.identifybutterfly": {
+    "title": "Butterfly: Identify, Search",
+    "score": 2.7714286,
+    "installs": "50,000+",
+    "query": "butterfly identifier",
+    "appId": "com.vlmt.identifybutterfly"
+  },
+  "org.inaturalist.android": {
+    "title": "iNaturalist",
+    "score": 3.596,
+    "installs": "10,000,000+",
+    "query": "butterfly identifier",
+    "appId": "org.inaturalist.android"
+  },
+  "tech.labelflow.butterflyspeciesidentifier": {
+    "title": "Butterfly Species Identifier",
+    "score": 2.6,
+    "installs": "5,000+",
+    "query": "butterfly identifier",
+    "appId": "tech.labelflow.butterflyspeciesidentifier"
+  },
+  "identifier.neural.butterflys": {
+    "title": "Automatic Butterfly Identifier",
+    "score": 3,
+    "installs": "10,000+",
+    "query": "butterfly identifier",
+    "appId": "identifier.neural.butterflys"
+  },
+  "com.isoperla.butterflyid": {
+    "title": "Butterfly Id - British Isles",
+    "score": 0,
+    "installs": "5,000+",
+    "query": "butterfly identifier",
+    "appId": "com.isoperla.butterflyid"
+  },
+  "com.picturerock.rock": {
+    "title": "Rock Identifier: Stone ID",
+    "score": 4.5077953,
+    "installs": "10,000,000+",
+    "query": "gem identifier",
+    "appId": "com.picturerock.rock"
+  },
+  "com.smtp.stone_identifire": {
+    "title": "Rock Identifier: Stone Checker",
+    "score": 3.9487178,
+    "installs": "50,000+",
+    "query": "gem identifier",
+    "appId": "com.smtp.stone_identifire"
+  },
+  "com.rubyglint.app": {
+    "title": "Ruby Glint: Rock Identifier",
+    "score": 4.6504855,
+    "installs": "10,000+",
+    "query": "gem identifier",
+    "appId": "com.rubyglint.app"
+  },
+  "com.elias.car_identifier": {
+    "title": "Car Identifier: WhatCar",
+    "score": 4.571429,
+    "installs": "5,000+",
+    "query": "car identifier",
+    "appId": "com.elias.car_identifier"
+  },
+  "com.car_identifier_app": {
+    "title": "Car Identifier",
+    "score": 0,
+    "installs": "10+",
+    "query": "car identifier",
+    "appId": "com.car_identifier_app"
+  },
+  "com.codinghub.caridentifier": {
+    "title": "Car Scan: Identify & Collect",
+    "score": 1.5714285,
+    "installs": "10,000+",
+    "query": "car identifier",
+    "appId": "com.codinghub.caridentifier"
+  },
+  "com.mdtech.car.identifier.android": {
+    "title": "Car Identifier",
+    "score": 0,
+    "installs": "100+",
+    "query": "car identifier",
+    "appId": "com.mdtech.car.identifier.android"
+  },
+  "com.diecast.carscanner": {
+    "title": "Car Identifier",
+    "score": 0,
+    "installs": "100+",
+    "query": "car identifier",
+    "appId": "com.diecast.carscanner"
+  },
+  "com.tree.ai.identifier": {
+    "title": "Tree Identifier",
+    "score": 4.6190476,
+    "installs": "1,000+",
+    "query": "tree identifier",
+    "appId": "com.tree.ai.identifier"
+  },
+  "com.dionysus_labs.treeid": {
+    "title": "TreeID - Tree Identifier",
+    "score": 4.12,
+    "installs": "50,000+",
+    "query": "tree identifier",
+    "appId": "com.dionysus_labs.treeid"
+  },
+  "leafly.android": {
+    "title": "Leafly: Find Cannabis and CBD",
+    "score": 4.7040243,
+    "installs": "10,000,000+",
+    "query": "weed identifier",
+    "appId": "leafly.android"
+  },
+  "com.mm.spiders.identification": {
+    "title": "Spider Identifier App by Photo",
+    "score": 3.55,
+    "installs": "1,000,000+",
+    "query": "spider identifier",
+    "appId": "com.mm.spiders.identification"
+  },
+  "com.ursa.spideridentifier": {
+    "title": "Spider identifier",
+    "score": 2.2222223,
+    "installs": "10,000+",
+    "query": "spider identifier",
+    "appId": "com.ursa.spideridentifier"
+  },
+  "com.upqode.spideridentification": {
+    "title": "Spider Identifier:Scanner AI+",
+    "score": 0,
+    "installs": "50+",
+    "query": "spider identifier",
+    "appId": "com.upqode.spideridentification"
+  },
+  "com.spider.identifier.csi": {
+    "title": "Spider Identifier: AI Scan",
+    "score": 0,
+    "installs": "5,000+",
+    "query": "spider identifier",
+    "appId": "com.spider.identifier.csi"
+  },
+  "com.shellium": {
+    "title": "SeaShell Identifier - Shellium",
+    "score": 3.2222223,
+    "installs": "1,000+",
+    "query": "shell identifier",
+    "appId": "com.shellium"
+  },
+  "com.jg.shellidentifier": {
+    "title": "Shell identifier",
+    "score": 2.121212,
+    "installs": "50,000+",
+    "query": "shell identifier",
+    "appId": "com.jg.shellidentifier"
+  },
+  "com.mdtech.shell.identifier.android": {
+    "title": "Shell Identifier",
+    "score": 0,
+    "installs": "500+",
+    "query": "shell identifier",
+    "appId": "com.mdtech.shell.identifier.android"
+  },
+  "com.ai.sea.shell.identifier.guide": {
+    "title": "Seashell Identifier App",
+    "score": 3.3636363,
+    "installs": "10,000+",
+    "query": "shell identifier",
+    "appId": "com.ai.sea.shell.identifier.guide"
+  },
+  "regixe.shellidentifierandscan.com": {
+    "title": "SeaShell Identifier",
+    "score": 0,
+    "installs": "500+",
+    "query": "shell identifier",
+    "appId": "regixe.shellidentifierandscan.com"
+  },
+  "com.crystalyze.crystalyze": {
+    "title": "Crystalyze: Crystal Identifier",
+    "score": 4.5,
+    "installs": "500,000+",
+    "query": "crystal identifier",
+    "appId": "com.crystalyze.crystalyze"
+  },
+  "com.TheCitrineCircle.CrystalGuideTheCC": {
+    "title": "A Guide To Crystals - The CC",
+    "score": 4.6679387,
+    "installs": "500,000+",
+    "query": "crystal identifier",
+    "appId": "com.TheCitrineCircle.CrystalGuideTheCC"
+  },
+  "com.eternalbeam.crystalidentifier": {
+    "title": "Crystal & Stone Identifier",
+    "score": 0,
+    "installs": "100+",
+    "query": "crystal identifier",
+    "appId": "com.eternalbeam.crystalidentifier"
+  },
+  "com.ilkerb.rock.mineral.identifier": {
+    "title": "Rock and Mineral Identifier",
+    "score": 4.125,
+    "installs": "10,000+",
+    "query": "mineral identifier",
+    "appId": "com.ilkerb.rock.mineral.identifier"
+  },
+  "vivino.web.app": {
+    "title": "Vivino: Drink the Right Wine",
+    "score": 4.7012877,
+    "installs": "50,000,000+",
+    "query": "wine label scanner",
+    "appId": "vivino.web.app"
+  },
+  "ai.winescanner.app": {
+    "title": "Wine Scanner AI: Remember Wine",
+    "score": 4.1764708,
+    "installs": "10,000+",
+    "query": "wine label scanner",
+    "appId": "ai.winescanner.app"
+  },
+  "com.winesearcher": {
+    "title": "Wine-Searcher",
+    "score": 4.78,
+    "installs": "1,000,000+",
+    "query": "wine label scanner",
+    "appId": "com.winesearcher"
+  },
+  "com.cellartracker.appV2": {
+    "title": "CellarTracker: Wine Tracker",
+    "score": 4.909091,
+    "installs": "100,000+",
+    "query": "wine label scanner",
+    "appId": "com.cellartracker.appV2"
+  },
+  "com.aiany.wine": {
+    "title": "Wine Scanner - Identify Wines",
+    "score": 0,
+    "installs": "50+",
+    "query": "wine label scanner",
+    "appId": "com.aiany.wine"
+  },
+  "com.colorpicker.identifier": {
+    "title": "Color Identifier: Paint Match",
+    "score": 4.1538463,
+    "installs": "1,000+",
+    "query": "paint color identifier",
+    "appId": "com.colorpicker.identifier"
+  },
+  "com.sherwin.diy": {
+    "title": "Sherwin-Williams Color Expert\u2122",
+    "score": 3.762963,
+    "installs": "1,000,000+",
+    "query": "paint color identifier",
+    "appId": "com.sherwin.diy"
+  },
+  "com.variable.sw": {
+    "title": "SherMatch+ by Sherwin-Williams",
+    "score": 3.5737705,
+    "installs": "1,000,000+",
+    "query": "paint color identifier",
+    "appId": "com.variable.sw"
+  },
+  "com.ppg.ppg_ppgac_mobileapp_glidden": {
+    "title": "Glidden",
+    "score": 3.85,
+    "installs": "100,000+",
+    "query": "paint color identifier",
+    "appId": "com.ppg.ppg_ppgac_mobileapp_glidden"
+  },
+  "ai.reimage.paint": {
+    "title": "Paint AI - Color Visualizer",
+    "score": 4.11,
+    "installs": "100,000+",
+    "query": "paint color identifier",
+    "appId": "ai.reimage.paint"
+  },
+  "com.codixus.fibercheck": {
+    "title": "FiberCheck AI Clothing Scanner",
+    "score": 0,
+    "installs": "10,000+",
+    "query": "fabric identifier",
+    "appId": "com.codixus.fibercheck"
+  },
+  "so.fabric.mobile": {
+    "title": "Fabric: AI Notes, Files, Ideas",
+    "score": 4.6836734,
+    "installs": "100,000+",
+    "query": "fabric identifier",
+    "appId": "so.fabric.mobile"
+  },
+  "is.fabric": {
+    "title": "Fabric Surveys",
+    "score": 2.9375,
+    "installs": "5,000+",
+    "query": "fabric identifier",
+    "appId": "is.fabric"
+  },
+  "com.fabric.calculator": {
+    "title": "Vijay: Fabric cost calculator",
+    "score": 0,
+    "installs": "500+",
+    "query": "fabric identifier",
+    "appId": "com.fabric.calculator"
+  },
+  "com.vvv.fabricselectorads": {
+    "title": "Fabric Design Visual Selector",
+    "score": 0,
+    "installs": "500+",
+    "query": "fabric identifier",
+    "appId": "com.vvv.fabricselectorads"
+  }
+}

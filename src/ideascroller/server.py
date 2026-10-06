@@ -66,7 +66,12 @@ class AppState:
 _state = AppState()
 
 
-_API_KEY_NAMES = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"]
+_API_KEY_NAMES = [
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "TRUSTMRR_API_KEY",
+]
 
 
 def _get_api_keys() -> dict[str, str]:

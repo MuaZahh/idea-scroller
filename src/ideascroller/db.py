@@ -27,7 +27,11 @@ CREATE TABLE IF NOT EXISTS videos (
     author TEXT NOT NULL,
     description TEXT NOT NULL,
     comment_count INTEGER NOT NULL,
-    url TEXT NOT NULL
+    url TEXT NOT NULL,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    like_count INTEGER NOT NULL DEFAULT 0,
+    share_count INTEGER NOT NULL DEFAULT 0,
+    save_count INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS comments (
     id TEXT PRIMARY KEY,
@@ -57,6 +61,15 @@ class Database:
         self._conn = await aiosqlite.connect(self._db_path)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.executescript(_SCHEMA)
+        # Idempotent migrations for existing DBs that predate new columns.
+        for col in ("view_count", "like_count", "share_count", "save_count"):
+            try:
+                await self._conn.execute(
+                    f"ALTER TABLE videos ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"
+                )
+            except Exception:
+                # Column already exists — aiosqlite raises OperationalError
+                pass
         await self._conn.commit()
 
     async def close(self) -> None:
@@ -122,16 +135,25 @@ class Database:
 
     async def save_video(self, video: Video) -> None:
         await self._conn.execute(
-            """INSERT OR IGNORE INTO videos (id, session_id, author, description, comment_count, url)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (video.id, video.session_id, video.author, video.description, video.comment_count, video.url))
+            """INSERT OR IGNORE INTO videos
+               (id, session_id, author, description, comment_count, url,
+                view_count, like_count, share_count, save_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (video.id, video.session_id, video.author, video.description,
+             video.comment_count, video.url,
+             video.view_count, video.like_count, video.share_count, video.save_count))
         await self._conn.commit()
 
     async def get_videos(self, session_id: str) -> list[Video]:
         cursor = await self._conn.execute("SELECT * FROM videos WHERE session_id = ?", (session_id,))
         rows = await cursor.fetchall()
         return [Video(id=row["id"], session_id=row["session_id"], author=row["author"],
-                      description=row["description"], comment_count=row["comment_count"], url=row["url"])
+                      description=row["description"], comment_count=row["comment_count"],
+                      url=row["url"],
+                      view_count=row["view_count"] if "view_count" in row.keys() else 0,
+                      like_count=row["like_count"] if "like_count" in row.keys() else 0,
+                      share_count=row["share_count"] if "share_count" in row.keys() else 0,
+                      save_count=row["save_count"] if "save_count" in row.keys() else 0)
                 for row in rows]
 
     async def save_comments(self, comments: list[Comment]) -> None:

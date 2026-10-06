@@ -11,6 +11,7 @@ from playwright.async_api import Page, Response, async_playwright
 
 from ideascroller.captcha import is_captcha_present, solve_captcha
 from ideascroller.models import Comment, Video
+from ideascroller.validators.tiktok_metrics import extract_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -352,12 +353,11 @@ class Scraper:
     # Video ID resolution
     # ------------------------------------------------------------------
 
-    def _find_video_id(self, author: Optional[str], desc: str) -> Optional[str]:
-        """Find video ID from intercepted XHR data by matching author + description."""
+    def _find_video_item(self, author: Optional[str], desc: str) -> Optional[dict]:
+        """Find the best-matching intercepted item for the currently visible video."""
         if not author:
             return None
 
-        # Collect all items from this author
         matches = [
             item
             for item in self._intercepted_video_items
@@ -368,21 +368,23 @@ class Scraper:
             return None
 
         if len(matches) == 1:
-            return matches[0].get("id")
+            return matches[0]
 
-        # Multiple videos by same author — disambiguate by description overlap
         desc_words = set(desc.lower().split()) if desc else set()
         if desc_words:
-            best_item = max(
+            return max(
                 matches,
                 key=lambda item: len(
                     desc_words & set((item.get("desc") or "").lower().split())
                 ),
             )
-            return best_item.get("id")
 
-        # Can't disambiguate — return most recent
-        return matches[-1].get("id")
+        return matches[-1]
+
+    def _find_video_id(self, author: Optional[str], desc: str) -> Optional[str]:
+        """Find video ID from intercepted XHR data by matching author + description."""
+        item = self._find_video_item(author, desc)
+        return item.get("id") if item else None
 
     @staticmethod
     def _extract_video_id(url: str) -> Optional[str]:
@@ -480,8 +482,9 @@ class Scraper:
                 last_article_id = article_id
                 self._videos_scanned += 1
 
-                # 2. RESOLVE video ID
-                video_id = self._find_video_id(author, description)
+                # 2. RESOLVE video ID (and metrics) from intercepted XHR data
+                matched_item = self._find_video_item(author, description)
+                video_id = matched_item.get("id") if matched_item else None
                 if not video_id:
                     video_id = self._extract_video_id(page.url)
 
@@ -504,6 +507,7 @@ class Scraper:
                     continue
 
                 # 4. SCRAPE — panel is already open, just collect XHR comments
+                metrics = extract_metrics(matched_item) if matched_item else None
                 video = Video(
                     id=video_id,
                     session_id=session_id,
@@ -511,6 +515,10 @@ class Scraper:
                     description=description[:500],
                     comment_count=comment_count,
                     url=page.url,
+                    view_count=metrics.view_count if metrics else 0,
+                    like_count=metrics.like_count if metrics else 0,
+                    share_count=metrics.share_count if metrics else 0,
+                    save_count=metrics.save_count if metrics else 0,
                 )
                 self._videos.append(video)
                 self._videos_scraped += 1

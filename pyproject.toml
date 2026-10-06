@@ -14,6 +14,7 @@ dependencies = [
     "opencv-python-headless>=4.9.0",
     "numpy>=1.26.0",
     "httpx>=0.28.0",
+    "pytrends>=4.9",
 ]
 
 [project.optional-dependencies]
@@ -42,3 +43,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "unit: fast isolated unit tests",
+    "integration: cross-module / pipeline tests",
+]

@@ -121,6 +121,42 @@
         }
         .history-info { color: #aaa; font-size: 13px; }
         .history-meta { color: #555; font-size: 11px; margin-top: 2px; }
+
+        /* Validation badges */
+        .validation-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+        .vbadge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
+                  display: inline-flex; align-items: center; gap: 4px; cursor: help; position: relative; }
+        .vbadge[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute; bottom: 100%; left: 0; margin-bottom: 4px;
+            background: #1a1a2e; color: #e0e0e0; padding: 8px 10px; border-radius: 6px;
+            font-size: 11px; font-weight: 400; white-space: pre-wrap; max-width: 320px;
+            width: max-content; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border: 1px solid #2a2a3e; line-height: 1.4;
+        }
+        /* TrustMRR */
+        .vb-tm-strong  { background: #10b98122; color: #10b981; }
+        .vb-tm-viable  { background: #f59e0b22; color: #f59e0b; }
+        .vb-tm-weak    { background: #f8717122; color: #f87171; }
+        .vb-tm-absent  { background: #6b728022; color: #9ca3af; }
+        .vb-tm-unchecked { background: #37374022; color: #6b7280; }
+        /* Reddit */
+        .vb-rd-hot   { background: #ef444422; color: #ef4444; }
+        .vb-rd-warm  { background: #f9731622; color: #f97316; }
+        .vb-rd-cool  { background: #3b82f622; color: #3b82f6; }
+        .vb-rd-dead  { background: #37374022; color: #6b7280; }
+        .vb-rd-unchecked { background: #37374022; color: #6b7280; }
+        /* Keywords */
+        .vb-kw-breakout   { background: #a855f722; color: #a855f7; }
+        .vb-kw-growing    { background: #10b98122; color: #10b981; }
+        .vb-kw-stable     { background: #f59e0b22; color: #f59e0b; }
+        .vb-kw-declining  { background: #f8717122; color: #f87171; }
+        .vb-kw-flat       { background: #37374022; color: #6b7280; }
+        .vb-kw-unchecked  { background: #37374022; color: #6b7280; }
+        /* Virality */
+        .vb-vir-high   { background: #22c55e22; color: #22c55e; }
+        .vb-vir-medium { background: #f59e0b22; color: #f59e0b; }
+        .vb-vir-low    { background: #6b728022; color: #9ca3af; }
     </style>
 </head>
 <body>
@@ -272,6 +308,120 @@
             });
         }
 
+        function formatCompactNumber(n) {
+            if (n === null || n === undefined) return '\u2014';
+            if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+            if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+            return String(n);
+        }
+
+        function buildValidationBadges(validation) {
+            if (!validation) return null;
+            var container = document.createElement('div');
+            container.className = 'validation-badges';
+
+            // TrustMRR — 💰
+            if (validation.trustmrr) {
+                var tm = validation.trustmrr;
+                var tmBadge = document.createElement('span');
+                tmBadge.className = 'vbadge vb-tm-' + (tm.verdict || 'unchecked');
+                var tmLabel = (tm.verdict || 'unchecked').toUpperCase();
+                var tmDetail;
+                if (tm.checked && tm.top_competitors && tm.top_competitors.length > 0) {
+                    var compLines = tm.top_competitors.slice(0, 3).map(function(c) {
+                        return '\u2022 ' + c.name + ' \u2014 $' + formatCompactNumber(c.mrr_usd) + '/mo';
+                    }).join('\n');
+                    tmDetail = 'Top competitors:\n' + compLines + '\n\n' +
+                               (tm.competitors_above_100k_mrr || 0) + ' doing $100K+/mo \u00B7 ' +
+                               (tm.competitors_above_10k_mrr || 0) + ' doing $10K+/mo';
+                    if (tm.verdict_source) tmDetail += '\nsource: ' + tm.verdict_source;
+                } else if (tm.error) {
+                    tmDetail = 'Error: ' + tm.error;
+                } else {
+                    tmDetail = 'No TrustMRR competitors found in this category';
+                }
+                tmBadge.setAttribute('data-tooltip', tmDetail);
+                tmBadge.textContent = '\uD83D\uDCB0 ' + tmLabel + (tm.max_mrr_usd ? ' \u00B7 $' + formatCompactNumber(tm.max_mrr_usd) + '/mo' : '');
+                container.appendChild(tmBadge);
+            }
+
+            // Reddit — 💬
+            if (validation.reddit) {
+                var rd = validation.reddit;
+                var rdBadge = document.createElement('span');
+                rdBadge.className = 'vbadge vb-rd-' + (rd.verdict || 'unchecked');
+                var rdLabel = (rd.verdict || 'unchecked').toUpperCase();
+                var rdDetail;
+                if (rd.checked && rd.top_threads && rd.top_threads.length > 0) {
+                    var threadLines = rd.top_threads.slice(0, 3).map(function(t) {
+                        return '\u2022 r/' + t.subreddit + ' (' + t.score + '\u2191 ' + t.num_comments + '\uD83D\uDCAC)\n  ' + (t.title || '').substring(0, 70);
+                    }).join('\n');
+                    rdDetail = (rd.total_threads_found || 0) + ' threads \u00B7 ' + formatCompactNumber(rd.total_upvotes) + ' upvotes\nSubs: ' +
+                               (rd.subreddits || []).slice(0, 5).join(', ') + '\n\n' + threadLines;
+                } else if (rd.error) {
+                    rdDetail = 'Error: ' + rd.error;
+                } else {
+                    rdDetail = 'No pain-point threads found on Reddit';
+                }
+                rdBadge.setAttribute('data-tooltip', rdDetail);
+                rdBadge.textContent = '\uD83D\uDCAC ' + rdLabel + (rd.total_threads_found ? ' \u00B7 ' + rd.total_threads_found : '');
+                container.appendChild(rdBadge);
+            }
+
+            // Keyword / Trends — 📈
+            if (validation.keyword) {
+                var kw = validation.keyword;
+                var kwBadge = document.createElement('span');
+                kwBadge.className = 'vbadge vb-kw-' + (kw.verdict || 'unchecked');
+                var kwLabel = (kw.verdict || 'unchecked').toUpperCase();
+                var kwDetail;
+                if (kw.checked) {
+                    kwDetail = 'Query: "' + (kw.keyword || '') + '"\n';
+                    if (kw.suggestion_count !== undefined && kw.suggestion_count !== null) {
+                        kwDetail += 'Google suggests: ' + kw.suggestion_count + ' related\n';
+                    }
+                    if (kw.wikipedia_monthly_views !== null && kw.wikipedia_monthly_views !== undefined) {
+                        kwDetail += 'Wikipedia: ' + formatCompactNumber(kw.wikipedia_monthly_views) + ' views/mo';
+                        if (kw.wikipedia_article_title) kwDetail += ' (' + kw.wikipedia_article_title + ')';
+                        kwDetail += '\n';
+                    }
+                    if (kw.search_volume) {
+                        kwDetail += 'Google Ads volume: ' + formatCompactNumber(kw.search_volume) + '/mo\n';
+                    }
+                    if (kw.autocomplete_suggestions && kw.autocomplete_suggestions.length > 0) {
+                        kwDetail += '\nTop suggestions:\n' + kw.autocomplete_suggestions.slice(0, 4).map(function(s){ return '\u2022 ' + s; }).join('\n');
+                    }
+                } else if (kw.error) {
+                    kwDetail = 'Error: ' + kw.error;
+                } else {
+                    kwDetail = 'Keyword signal unavailable';
+                }
+                kwBadge.setAttribute('data-tooltip', kwDetail);
+                kwBadge.textContent = '\uD83D\uDCC8 ' + kwLabel;
+                container.appendChild(kwBadge);
+            }
+
+            // Virality — 🔥
+            if (validation.virality && validation.virality.max_views) {
+                var v = validation.virality;
+                var vMax = v.max_views || 0;
+                var vClass = vMax >= 1e6 ? 'vb-vir-high' : vMax >= 1e5 ? 'vb-vir-medium' : 'vb-vir-low';
+                var vBadge = document.createElement('span');
+                vBadge.className = 'vbadge ' + vClass;
+                vBadge.textContent = '\uD83D\uDD25 ' + formatCompactNumber(vMax) + ' max views';
+                var vDetail = 'Session virality:\n' +
+                              '\u2022 ' + (v.videos || 0) + ' videos\n' +
+                              '\u2022 ' + formatCompactNumber(v.total_views) + ' total views\n' +
+                              '\u2022 ' + formatCompactNumber(v.avg_views) + ' avg views\n' +
+                              '\u2022 ' + formatCompactNumber(v.total_likes) + ' total likes';
+                vBadge.setAttribute('data-tooltip', vDetail);
+                container.appendChild(vBadge);
+            }
+
+            return container;
+        }
+
         function renderClusters(clusters) {
             var container = document.getElementById('clustersContainer');
             while (container.firstChild) {
@@ -362,6 +512,10 @@
                     el.appendChild(edgeDiv);
                 }
 
+                // Validation signals
+                var badges = buildValidationBadges(cluster.validation);
+                if (badges) el.appendChild(badges);
+
                 container.appendChild(el);
             }
         }
@@ -380,6 +534,59 @@
                 if (c.competitors && c.competitors.length > 0) md += ' | **Competitors:** ' + c.competitors.join(', ');
                 if (c.market || (c.competitors && c.competitors.length > 0)) md += '\n\n';
                 if (c.edge) md += '**Edge:** ' + c.edge + '\n\n';
+
+                // Validation signals
+                if (c.validation) {
+                    var v = c.validation;
+                    var vLines = [];
+                    if (v.trustmrr) {
+                        var tm = v.trustmrr;
+                        var tmParts = [];
+                        if (tm.competitors_above_100k_mrr !== undefined && tm.competitors_above_100k_mrr !== null) {
+                            tmParts.push(tm.competitors_above_100k_mrr + ' doing $100K+/mo');
+                        }
+                        if (tm.max_mrr_usd) {
+                            tmParts.push('max $' + formatCompactNumber(tm.max_mrr_usd) + '/mo');
+                        }
+                        var tmSuffix = tmParts.length > 0 ? ' (' + tmParts.join('; ') + ')' : '';
+                        vLines.push('- \uD83D\uDCB0 TrustMRR: **' + (tm.verdict || 'unchecked') + '**' + tmSuffix);
+                    }
+                    if (v.reddit) {
+                        var rd = v.reddit;
+                        var rdParts = [];
+                        if (rd.total_threads_found !== undefined && rd.total_threads_found !== null) {
+                            rdParts.push(rd.total_threads_found + ' threads');
+                        }
+                        if (rd.total_upvotes !== undefined && rd.total_upvotes !== null) {
+                            rdParts.push(formatCompactNumber(rd.total_upvotes) + ' upvotes');
+                        }
+                        if (rd.subreddits && rd.subreddits.length > 0) {
+                            rdParts.push('subs: ' + rd.subreddits.slice(0, 5).join(', '));
+                        }
+                        var rdSuffix = rdParts.length > 0 ? ' (' + rdParts.join(', ') + ')' : '';
+                        vLines.push('- \uD83D\uDCAC Reddit: **' + (rd.verdict || 'unchecked') + '**' + rdSuffix);
+                    }
+                    if (v.keyword) {
+                        var kw = v.keyword;
+                        var kwParts = [];
+                        if (kw.wikipedia_monthly_views !== null && kw.wikipedia_monthly_views !== undefined) {
+                            kwParts.push('Wikipedia ' + formatCompactNumber(kw.wikipedia_monthly_views) + '/mo');
+                        }
+                        if (kw.suggestion_count !== undefined && kw.suggestion_count !== null) {
+                            kwParts.push(kw.suggestion_count + ' Google suggestions');
+                        }
+                        var kwSuffix = kwParts.length > 0 ? ' (' + kwParts.join(', ') + ')' : '';
+                        vLines.push('- \uD83D\uDCC8 Keyword: **' + (kw.verdict || 'unchecked') + '**' + kwSuffix);
+                    }
+                    if (v.virality && v.virality.max_views) {
+                        vLines.push('- \uD83D\uDD25 Virality: ' + formatCompactNumber(v.virality.max_views) +
+                                    ' max views across ' + (v.virality.videos || 0) + ' videos');
+                    }
+                    if (vLines.length > 0) {
+                        md += '### Validation\n' + vLines.join('\n') + '\n\n';
+                    }
+                }
+
                 md += '*' + c.comment_count + ' comments across ' + c.video_count + ' videos*\n\n';
                 if (c.sample_comments && c.sample_comments.length > 0) {
                     md += 'Sample comments:\n';
